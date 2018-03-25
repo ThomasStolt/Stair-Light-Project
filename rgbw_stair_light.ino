@@ -19,6 +19,7 @@
 // about 10 seconds to go up the stairs at normal speed) and a delay after each
 // animation of 7 seconds. You will have to play around to fit your needs.
 //
+//
 // last update 14.03.2017
 //
 
