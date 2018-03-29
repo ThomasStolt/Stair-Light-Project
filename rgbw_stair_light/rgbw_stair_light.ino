@@ -1,9 +1,11 @@
 // STAIR LIGHT PROJECT - started October 2016
 // ==========================================
 //
-// This project is using NeoPixels to illumiate individual steps of a set of stairs
-// automatically, while someone is walking up (or down) the stairs. The SR501 is being used
-// as motion sensor. An ESP8266 is used as the microcontroller.
+// This project is using NeoPixels to illuminate individual steps of a flight of stairs
+// automatically, while someone is walking up (or down) the stairs. The project is based
+// on an ESP8266 as microcontroller, strips of SK2812 as LEDs (should be compatible to
+// WS2812) and two SR501 as motion
+// sensor. An ESP8266 is used as the microcontroller.
 // I have written this sketch so that you should be easily able to adapt it to your
 // own needs. You can e.g. adapt the number of steps of your stairs (STEPS) as well as
 // the 'width' of your stairs, in terms of how many LEDs are you using per step (WIDTH).
@@ -32,30 +34,33 @@
 #include <ESP8266WiFiMulti.h>
 #include <ESP8266HTTPClient.h>
 #include <ESP8266httpUpdate.h>
-
-#include "parking.h"
 #include "credentials.h"
 
 #ifdef __AVR__
   #include <avr/power.h>
 #endif
 
-#define NEOPIXEL_PIN 14           // which pin are the LEDs connected to?
-#define PIR1_PIN 5                // Pin D0 GPIO 5
-#define PIR2_PIN 16               // Pin D0 GPIO 16
-#define STEPS 5                   // how many steps do the stairs have?
+#define NEOPIXEL_PIN  14          // Pin D5 == GPIO 14 -> NeoPixels
+#define PIR1_PIN 16               // Pin D0 == GPIO 16 -> PIR Sensor 1
+#define PIR2_PIN 4                // Pin D2 == GPIO 4  -> Pir Sensor 2
+#define STEPS 16                   // how many steps do the stairs have?
 #define WIDTH 27                  // how many LEDs per step do we have?
-#define NUM_LEDS  136             // how many LEDs do we have overall?
-#define ANIM_DURATION 20000       // how long is the animation active max? Guessing 20 seconds here
+#define NUM_LEDS  432             // how many LEDs do we have overall?
+#define ANIM_DURATION 10000       // how long is the animation active max? Guessing 20 seconds here
 // if BRIGHNESS is too small (around 10 or less), the animation appears 'skippy', i.e. not smooth
 // that is because there are only a few (10) levels of brighness for each color, so this is normal
-#define BRIGHTNESS 55             // limit brightness of the strip
+#define BRIGHTNESS 200             // limit brightness of the strip
 #define USE_SERIAL Serial
 #define UPDATE_SERVER "http://192.168.2.7"
+
+
+
 
 ESP8266WiFiMulti WiFiMulti;
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRBW + NEO_KHZ800);
+
+
 
 int gammaw[] = {
     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
@@ -75,11 +80,12 @@ int gammaw[] = {
   177,180,182,184,186,189,191,193,196,198,200,203,205,208,210,213,
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
+#include "parking.h"
 
 void setup() {
   // Setting up the serial line
   Serial.begin(115200);
-  // USE_SERIAL.setDebugOutput(true);
+  USE_SERIAL.setDebugOutput(true);
   USE_SERIAL.println();
   USE_SERIAL.println();
   USE_SERIAL.println();
@@ -91,255 +97,120 @@ void setup() {
   }
 
   // setting up WiFi and printing information
-  WiFiMulti.addAP(mySSID, myPASSWORD);
+  // this comes from .arduino15/packages/esp8266/hardware/esp82766/2.4.1/libaries/credentials
+  // and needs to be created. Only here to hide my own credentials from Github ;)
+  WiFi.begin(mySSID, myPass);
+  
+  Serial.print("Connecting");
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println();
+
+  Serial.print("Connected, IP address: ");
+  Serial.println(WiFi.localIP());
   byte mac[6];
   WiFi.macAddress(mac);
-  Serial.print("MAC address: ");
+  Serial.print("MAC: ");
   for (int i = 0; i < 5; i++) {
     Serial.print(mac[i], HEX);
     Serial.print(":");
   }
   Serial.println(mac[5], HEX);
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());  
+  
+  // Getting updates
+  // This needs to be in setup()
 
+  if((WiFi.status() == WL_CONNECTED)) {
+    Serial.println("Versuche upzudaten !!!!!!!!!!!!!!!");
+    t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/iotappstoryv20.php");
+    Serial.println("Jetzt hinter dem ESPhttpUpdate call !!!!!!!!!!!!!!!");
+    // t_httpUpdate_return  ret = ESPhttpUpdate.update("https://server/file.bin");
+    Serial.println("Jetzt hier 2!!!!!!!!!!!!!!!");
+    Serial.flush();
+      switch(ret) {
+        case HTTP_UPDATE_FAILED:
+          Serial.println("Jetzt hier 3 -> Update fehlgeschlagen!!!!!!");
+          Serial.flush();
+          USE_SERIAL.printf("HTTP_UPDATE_FAILD Error (%d): %s", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
+        break;
+        case HTTP_UPDATE_NO_UPDATES:
+          Serial.println("Jetzt hier 4 -> keine Updates vorhanden!!!!!!");
+          Serial.flush();
+          USE_SERIAL.println("HTTP_UPDATE_NO_UPDATES");
+        break;
+        case HTTP_UPDATE_OK:
+          Serial.println("Jetzt hier 5 -> Update OK!!!!!!");
+          Serial.flush();
+          USE_SERIAL.println("HTTP_UPDATE_OK");
+        break;
+      }
+    }
 
+  
   
   strip.setBrightness(BRIGHTNESS);
   strip.begin(); // prepare the data pin for NeoPixel output
   strip.show(); // Initialize all pixels to 'off'
+  
   pinMode(PIR1_PIN, INPUT);
   pinMode(PIR2_PIN, INPUT);
   
 }
   
 void loop() {
-
   int count = 0, i;
 
-
-  // if((WiFiMulti.run() == WL_CONNECTED)) {
-  //   t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/rgbw_stair_light.bin");
-    // t_httpUpdate_return  ret = ESPhttpUpdate.update("https://server/file.bin");
-    // Serial.println("Jetzt hier 2!");
-    // switch(ret) {
-      // case HTTP_UPDATE_FAILED:
-        // USE_SERIAL.printf("HTTP_UPDATE_FAILD Error (%d): %s", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
-      // break;
-      // case HTTP_UPDATE_NO_UPDATES:
-        // USE_SERIAL.println("HTTP_UPDATE_NO_UPDATES");
-      // break;
-      // case HTTP_UPDATE_OK:
-        // USE_SERIAL.println("HTTP_UPDATE_OK");
-      // break;
-    // }
-  // }
-
-
-  // Rainbow aninmation testing
-  i = 0;
-  int j = 0;
-  int k = 0;
-  int color_space;
-  while (true) {
-    if ( i >= 256) {
-      i = 0;
-    }
-    color_space = (int) 256 / STEPS;
-    for ( j = 1; j <= STEPS; j++ ) {
-      if ( ( i + color_space * j ) > 255) {
-        k = ( i + color_space * j ) - 256;
-      }
-      else {
-        k = ( i + color_space * j );
-        // yield();
-      }
-      setStep(j, Wheel(k));
-    }
-    i = i + 2;
-  }
-
-
-  
+  Serial.println("Jetzt hier 1!!!!!!!!!!!!!!!");
+  Serial.flush();
+  Serial.print("Ich bin hier!"); 
   uint32 s_timer, c_timer; // start time and current time
   int val1, val2; // Value for PIR Sensor 1 and 2
   while (true) {
     val1 = digitalRead(PIR1_PIN);  // read input value of PIR 1
     val2 = digitalRead(PIR2_PIN);  // read input value of PIR 2
-    if (val1 == HIGH) {            // check if the input is HIGH
-      Serial.println("UP PIR Sensor 1 Motion detected!");
-      s_timer = millis();
-      for ( i = 1; i <= STEPS; i++ ) {
-        fadeInSingleStep(i, 500, 50, 50, 50, 50);
-      }
-      val2 = digitalRead(PIR2_PIN);
-      c_timer = millis();
-      // wait until either time elapsed or second PIR triggered
-      while ( ! ( val2 == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
-        yield();
-        delay(100);
-        val2 = digitalRead(PIR2_PIN);
-        if (val2 == HIGH) {
-          Serial.println("UP PIR Sensor 2 Motion detected!");
-        }
-        c_timer = millis();
-      }
-      // end animation
-      for ( i = 1; i <= STEPS ; i++ ) {
-        fadeOutSingleStep(i, 500, 50, 50, 50, 50);
-      }
-      val2 = LOW;
-      delay(7000);
-    } else if ( val2 == HIGH ) {
-      Serial.println("UP PIR Sensor 2 Motion detected!");
-      s_timer = millis();
-      for ( i = STEPS; i >= 1; i-- ) {
-        fadeInSingleStep(i, 500, 50, 50, 50, 50);
-      }
-      val1 = digitalRead(PIR1_PIN);
-      c_timer = millis();
-      // wait until either time elapsed or second PIR triggered
-      while ( ! ( val1 == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
-        yield();
-        delay(100);
-        val1 = digitalRead(PIR1_PIN);
-        if (val1 == HIGH) {
-          Serial.println("UP PIR Sensor 1 Motion detected!");
-        }
-        c_timer = millis();
-      }
-      // end animation
-      for ( i = STEPS; i >= 1 ; i-- ) {
-        fadeOutSingleStep(i, 500, 50, 50, 50, 50);
-      }
-      val1 = LOW;
-      delay(7000);
-    }
-    count++;
-    Serial.print(".");
-    if (count>100) {
-      Serial.println(".");
-      count = 0;
-    }
-  yield();
-  delay(200);
-  }
-}
 
-// sets all NeoPixels of step s to the color c
-
-void setStep(int s, int c){
-  int step_start = (s - 1) * WIDTH;
-  int step_end = step_start + WIDTH;
-  for (int i = step_start; i < step_end; i++ ) {
-    strip.setPixelColor(i, c);
+ while (true) {
+     val1 = digitalRead(PIR1_PIN);  // read input value of PIR 1
+     val2 = digitalRead(PIR2_PIN);  // read input value of PIR 2
+     if ( val1 == HIGH ) {
+       simple_fade(val1, val2, s_timer, c_timer, 20000);
+       // strip.setPixelColor(0, 0, 200, 0, 50);
+     } else if ( val1 == LOW ) {
+       setStep(5,0);
+       // strip.setPixelColor(0, 0, 0, 0, 0);
+     }
+     if ( val2 == HIGH ) {
+       simple_fade(val1, val2, s_timer, c_timer, 2000);
+       // strip.setPixelColor(26, 0, 200, 0, 50);
+     } else if ( val2 == LOW ) {
+       setStep(1,0);
+       // strip.setPixelColor(26, 0, 0, 0, 0);
+     }
+     strip.show();
+     yield();
+     delay(20);
+   }
+    
+// =========================================================================
+    if (val1 == HIGH || val2 == HIGH){
+      simple_fade(val1, val1, s_timer, c_timer, 20000);
+    }
+    delay(200);
     yield();
-  }
-  strip.show();
-}
-
-
-// sets all NeoPixels of step s to a random colour per pixel
-void setStepRndm(int s, int c){
-  // defines, which pixel is the beginning of the step
-  int step_start = (s - 1) * WIDTH;
-  // defines, which pixel is the end of the step
-  int step_end = step_start + WIDTH;
-  for(int i=step_start;i<step_end;i++){
-    c = random(16711680);
-    // Serial.println(c);
-    strip.setPixelColor(i, c);
-    yield();
-  }
-  strip.show();
-}
-
-
-
-void fadeStep(int red, int green, int blue, int white){
-  int i, j, s;
-  // defines, which pixel is the beginning of the step
-  for (s=1;s<=STEPS;s++) {
-    int step_start = (s - 1) * WIDTH;
-    // defines, which pixel is the end of the step
-    int step_end = step_start + WIDTH;
-    Serial.print("Step start: ");
-    Serial.println(step_start+1);
-    Serial.print("Step end: ");
-    Serial.println(step_end);
-    for (i=0;i<100;i++) {
-      for (j=step_start;j<step_end;j++) {
-        strip.setPixelColor(j, gammaw[i], 0, gammaw[i], gammaw[i]);
-        yield();
-      }
-      strip.show();
-    }
+    Serial.print('.');
   }
 }
 
-// This function fadeInSingleStep will fade a single step number step_number from zero (off)
-// to the values red, green, blue within the allotted time fade_time_ms (in milliseconds)
-// A reverse functionality is provided by the function fadeOutSingleStep
 
-void fadeInSingleStep(int step_number, int fade_time_ms, int red, int green, int blue, int white){
-  int i, j;
-  float i_1, step_width;
-  uint32_t t_1, t_2;
-  uint32_t cpu_time_used;
-  // figure out, which pixel is the beginning of the step
-  int step_start = (step_number - 1) * WIDTH;
-  // figure out, which pixel is the end of the step
-  int step_end = step_start + WIDTH;
-  // figure out the factor for red, green, blue and white
-  float factor_r = red / 256;
-  float factor_g = green / 256;
-  float factor_b = blue / 256;
-  float factor_w = white / 256;
-  step_width = (float) fade_time_ms / 1488;
-  i_1 = 0;
-  for ( i = 0; i < 256; i = (int) i_1 ) {
-    i_1 = i_1 + 1 / step_width;
-    for (j=step_start;j<step_end;j++) {
-      strip.setPixelColor(j, 0, 0, 0, gammaw[i]);
-      yield();
-    }
-    // Serial.println(gammaw[i]);
-    strip.show();
-    // delay(10);
-  }
-  // Serial.println("Animantion done!");
-  // delay(1000);
-}
 
-void fadeOutSingleStep(int step_number, int fade_time_ms, int red, int green, int blue, int white){
-  int i, j;
-  float i_1, step_width;
-  uint32_t t_1, t_2;
-  uint32_t cpu_time_used;
-  // figure out, which pixel is the beginning of the step
-  int step_start = (step_number - 1) * WIDTH;
-  // figure out, which pixel is the end of the step
-  int step_end = step_start + WIDTH;
-  // figure out the factor for red, green, blue and white
-  float factor_r = red / 256;
-  float factor_g = green / 256;
-  float factor_b = blue / 256;
-  float factor_w = white / 256;
-  step_width = (float) fade_time_ms / 1488;
-  i_1 = 256;
-  for ( i = 256; i > 0; i = (int) i_1 ) {
-    i_1 = i_1 - 1 / step_width;
-    for (j=step_start;j<step_end;j++) {
-      strip.setPixelColor(j, 0, 0, 0, gammaw[i]);
-      yield();
-    }
-    // Serial.println(gammaw[i]);
-    strip.show();
-    // delay(10);
-  }
-  // Serial.println("Animantion done!");
-  // delay(1000);
-}
+
+
+
+
+
 
 // Fill the dots one after the other with a color
 void colorWipe(uint32_t c, uint8_t wait) {
