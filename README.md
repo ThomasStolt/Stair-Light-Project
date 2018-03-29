@@ -15,6 +15,7 @@ This project is based on RGBW LED stripes (I am using SK6812, according to some 
 ### Contribution guidelines ###
 
 I am looking for contributors who would be willing to come up with some cool animations, whatever the ESP8266 and the SK6812 can master. It would probably be best, if you build your own test bed. I have a test bed here, with an ESP8266 on a bread board, connected to 5 "steps" (rows) of SK6812 LEDs. In order for it to be small, I used the 144LEDs/m strips to build this.
+I am trying to come up with a sort of "API" whereby all parameters for an animation is being passed to a animation function. That way, I can keep the general framework the same and people can add animations, if they wish to.
 
 ### Who do I talk to? ###
 
