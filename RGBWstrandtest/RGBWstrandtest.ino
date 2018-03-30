@@ -3,7 +3,7 @@
   #include <avr/power.h>
 #endif
 
-#define PIN 12
+#define PIN 14
 
 #define NUM_LEDS 432
 
@@ -43,10 +43,10 @@ void setup() {
 
 void loop() {
   // Some example procedures showing how to display to the pixels:
-  colorWipe(strip.Color(255, 0, 0), 5); // Red
-  colorWipe(strip.Color(0, 255, 0), 5); // Green
-  colorWipe(strip.Color(0, 0, 255), 5); // Blue
-  colorWipe(strip.Color(0, 0, 0, 255), 5); // White
+  // colorWipe(strip.Color(255, 0, 0), 1); // Red
+  // colorWipe(strip.Color(0, 255, 0), 1); // Green
+  // colorWipe(strip.Color(0, 0, 255), 1); // Blue
+  // colorWipe(strip.Color(0, 0, 0, 255), 1); // White
 
   whiteOverRainbow(20,15,5);  
 

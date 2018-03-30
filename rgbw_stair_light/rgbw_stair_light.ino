@@ -17,14 +17,13 @@
 // There is some tweaking needed depending on local parameters with the PIR sensors,
 // the ANIM_DURATION and the delay after each animation. For me it worked when I set
 // the activation time potentiometer to minimum (which results to about 4 seconds of
-// the pin set to high), an ANIM_DURATION of 20 seconds (because in my hous, one needs
+// the pin set to high), an ANIM_DURATION of 20 seconds (because in my house, one needs
 // about 10 seconds to go up the stairs at normal speed) and a delay after each
 // animation of 7 seconds. You will have to play around to fit your needs.
 //
 //
-// last update 14.03.2017
+// last update 30.03.2018
 //
-
 
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
@@ -34,25 +33,30 @@
 #include <ESP8266WiFiMulti.h>
 #include <ESP8266HTTPClient.h>
 #include <ESP8266httpUpdate.h>
-#include "credentials.h"
+#include <credentials.h>
 
 #ifdef __AVR__
   #include <avr/power.h>
 #endif
 
+// Pin Assignment: it turns out that GPIO 15 and 2 influence the boot mode
+// of the ESP8266, should not be used
+//
+
 #define NEOPIXEL_PIN  14          // Pin D5 == GPIO 14 -> NeoPixels
 #define PIR1_PIN 16               // Pin D0 == GPIO 16 -> PIR Sensor 1
 #define PIR2_PIN 4                // Pin D2 == GPIO 4  -> Pir Sensor 2
-#define STEPS 16                   // how many steps do the stairs have?
+// #define STEPS 16                    // how many steps do the stairs have?
+#define STEPS 5                    // how many steps do the stairs have?
 #define WIDTH 27                  // how many LEDs per step do we have?
-#define NUM_LEDS  432             // how many LEDs do we have overall?
-#define ANIM_DURATION 10000       // how long is the animation active max? Guessing 20 seconds here
+// #define NUM_LEDS  432             // how many LEDs do we have overall?
+#define NUM_LEDS  135             // how many LEDs do we have overall?
+#define ANIM_DURATION 20000       // how long is the animation active max? Guessing 20 seconds here
 // if BRIGHNESS is too small (around 10 or less), the animation appears 'skippy', i.e. not smooth
 // that is because there are only a few (10) levels of brighness for each color, so this is normal
-#define BRIGHTNESS 200             // limit brightness of the strip
+#define BRIGHTNESS 255            // limit brightness of the strip
 #define USE_SERIAL Serial
-#define UPDATE_SERVER "http://192.168.2.7"
-
+#define OTA_SERVER "http://192.168.2.7"
 
 
 
@@ -120,37 +124,23 @@ void setup() {
   }
   Serial.println(mac[5], HEX);
   
-  // Getting updates
-  // This needs to be in setup()
-
+  // Getting updates OTA
   if((WiFi.status() == WL_CONNECTED)) {
-    Serial.println("Versuche upzudaten !!!!!!!!!!!!!!!");
-    t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/iotappstoryv20.php");
-    Serial.println("Jetzt hinter dem ESPhttpUpdate call !!!!!!!!!!!!!!!");
-    // t_httpUpdate_return  ret = ESPhttpUpdate.update("https://server/file.bin");
-    Serial.println("Jetzt hier 2!!!!!!!!!!!!!!!");
-    Serial.flush();
+    // t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/iotappstoryv20.php");
+    t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/bin/rgbw_stair_light");
       switch(ret) {
         case HTTP_UPDATE_FAILED:
-          Serial.println("Jetzt hier 3 -> Update fehlgeschlagen!!!!!!");
-          Serial.flush();
           USE_SERIAL.printf("HTTP_UPDATE_FAILD Error (%d): %s", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
         break;
         case HTTP_UPDATE_NO_UPDATES:
-          Serial.println("Jetzt hier 4 -> keine Updates vorhanden!!!!!!");
-          Serial.flush();
           USE_SERIAL.println("HTTP_UPDATE_NO_UPDATES");
         break;
         case HTTP_UPDATE_OK:
-          Serial.println("Jetzt hier 5 -> Update OK!!!!!!");
-          Serial.flush();
           USE_SERIAL.println("HTTP_UPDATE_OK");
         break;
       }
     }
-
-  
-  
+ 
   strip.setBrightness(BRIGHTNESS);
   strip.begin(); // prepare the data pin for NeoPixel output
   strip.show(); // Initialize all pixels to 'off'
@@ -161,46 +151,33 @@ void setup() {
 }
   
 void loop() {
-  int count = 0, i;
-
-  Serial.println("Jetzt hier 1!!!!!!!!!!!!!!!");
-  Serial.flush();
-  Serial.print("Ich bin hier!"); 
+  Serial.println("");
+  int i, count = 0;
   uint32 s_timer, c_timer; // start time and current time
   int val1, val2; // Value for PIR Sensor 1 and 2
+  setAll(0,0,0,0);
   while (true) {
-    val1 = digitalRead(PIR1_PIN);  // read input value of PIR 1
-    val2 = digitalRead(PIR2_PIN);  // read input value of PIR 2
-
- while (true) {
-     val1 = digitalRead(PIR1_PIN);  // read input value of PIR 1
-     val2 = digitalRead(PIR2_PIN);  // read input value of PIR 2
-     if ( val1 == HIGH ) {
-       simple_fade(val1, val2, s_timer, c_timer, 20000);
-       // strip.setPixelColor(0, 0, 200, 0, 50);
-     } else if ( val1 == LOW ) {
-       setStep(5,0);
-       // strip.setPixelColor(0, 0, 0, 0, 0);
-     }
-     if ( val2 == HIGH ) {
-       simple_fade(val1, val2, s_timer, c_timer, 2000);
-       // strip.setPixelColor(26, 0, 200, 0, 50);
-     } else if ( val2 == LOW ) {
-       setStep(1,0);
-       // strip.setPixelColor(26, 0, 0, 0, 0);
-     }
-     strip.show();
-     yield();
-     delay(20);
-   }
-    
-// =========================================================================
-    if (val1 == HIGH || val2 == HIGH){
-      simple_fade(val1, val1, s_timer, c_timer, 20000);
-    }
-    delay(200);
+    val1 = digitalRead(PIR1_PIN);
     yield();
-    Serial.print('.');
+    delay(50);
+    val2 = digitalRead(PIR2_PIN);
+    yield();
+    delay(50);
+    if ( val1 == HIGH ) {
+      simple_fade("UP");
+      val1 = digitalRead(PIR1_PIN);
+    }
+    if ( val2 == HIGH ) {
+      simple_fade("DOWN");
+      val2 = digitalRead(PIR2_PIN);  // read input value of PIR 2
+    }
+    Serial.print(".");
+    if ( count++ > 100 ) {
+      Serial.println("");
+      count = 0;
+    }
+    yield();
+    delay(200);
   }
 }
 
@@ -247,7 +224,7 @@ void setAll(int red, int green, int blue, int white){
 
   for(int i=0;i<NUM_LEDS;i++){
     // pixels.Color takes RGBW values, from 0,0,0,0 up to 255,255,255,255
-    strip.setPixelColor(i, strip.Color(red,green,blue,white)); // Moderately bright green color.
+    strip.setPixelColor(i, strip.Color(red,green,blue,white));
     // strip.show(); // This sends the updated pixel color to the hardware.
   }
 }

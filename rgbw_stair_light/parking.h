@@ -40,125 +40,124 @@
 // A reverse functionality is provided by the function fadeOutSingleStep
 
 void fadeInSingleStep(int step_number, int fade_time_ms, int red, int green, int blue, int white){
-  int i, j;
+  int i, j; 
   float i_1, step_width;
   uint32_t t_1, t_2;
-  uint32_t cpu_time_used;
   // figure out, which pixel is the beginning of the step
   int step_start = (step_number - 1) * WIDTH;
   // figure out, which pixel is the end of the step
   int step_end = step_start + WIDTH;
   // figure out the factor for red, green, blue and white
-  float factor_r = red / 256;
-  float factor_g = green / 256;
-  float factor_b = blue / 256;
-  float factor_w = white / 256;
+  float factor_r = float(red) / 256;
+  float factor_g = float(green) / 256;
+  float factor_b = float(blue) / 256;
+  float factor_w = float(white) / 512;
   step_width = (float) fade_time_ms / 1488;
   i_1 = 0;
   for ( i = 0; i < 256; i = (int) i_1 ) {
     i_1 = i_1 + 1 / step_width;
     for (j=step_start;j<step_end;j++) {
-      strip.setPixelColor(j, 0, 0, 0, gammaw[i]);
+      strip.setPixelColor(j, gammaw[int(i*factor_r)],gammaw[int(i*factor_g)],gammaw[int(i*factor_b)], gammaw[int(i*factor_w)]);
       yield();
     }
-    // Serial.println(gammaw[i]);
     strip.show();
-    // delay(10);
+    yield();
   }
-  // Serial.println("Animantion done!");
-  // delay(1000);
+  delay(10);
 }
-
 
 void fadeOutSingleStep(int step_number, int fade_time_ms, int red, int green, int blue, int white){
   int i, j;
   float i_1, step_width;
   uint32_t t_1, t_2;
-  uint32_t cpu_time_used;
   // figure out, which pixel is the beginning of the step
   int step_start = (step_number - 1) * WIDTH;
   // figure out, which pixel is the end of the step
   int step_end = step_start + WIDTH;
   // figure out the factor for red, green, blue and white
-  float factor_r = red / 256;
-  float factor_g = green / 256;
-  float factor_b = blue / 256;
-  float factor_w = white / 256;
+  float factor_r = float(red) / 256;
+  float factor_g = float(green) / 256;
+  float factor_b = float(blue) / 256;
+  float factor_w = float(white) / 256;
   step_width = (float) fade_time_ms / 1488;
   i_1 = 255;
   for ( i = 255; i > 0; i = (int) i_1 ) {
     i_1 = i_1 - 1 / step_width;
     for (j=step_start;j<step_end;j++) {
-      strip.setPixelColor(j, 0, 0, 0, gammaw[i]);
+      strip.setPixelColor(j, gammaw[int(i*factor_r)],gammaw[int(i*factor_g)],gammaw[int(i*factor_b)], gammaw[int(i*factor_w)]);
       yield();
     }
-    // Serial.println(gammaw[i]);
     strip.show();
-    // delay(10);
+    yield();
   }
-  // Serial.println("Animantion done!");
-  // delay(1000);
+  delay(10);
 }
 
 
 
-void simple_fade(int val1, int val2, uint32 s_timer, uint32 c_timer, int duration){
-// =========================================================================
-  int count = 0, i;
-  if (val1 == HIGH) {            // check if the input is HIGH
-    Serial.println("UP PIR Sensor 1 Motion detected!");
-    s_timer = millis();
+void simple_fade(String dir){
+  int count = 0, i, val1, val2;
+  unsigned long s_timer = millis();
+  unsigned long c_timer;
+  int red = random(256);
+  Serial.print("red: ");
+  Serial.println(red);
+  int green = random(256);
+  Serial.print("green: ");
+  Serial.println(green);  
+  int blue = random(256);
+  Serial.print("blue: ");
+  Serial.println(blue);  
+  int white = random(256);
+  Serial.print("white: ");
+  Serial.println(white);
+  if (dir == "UP") { // are we moving up the stairs?
+    Serial.println("Moving up the stairs");
     for ( i = 1; i <= STEPS; i++ ) {
-      fadeInSingleStep(i, 100, 50, 50, 50, 50);
+      fadeInSingleStep(i, 100, red, green, blue, white);
     }
     val2 = digitalRead(PIR2_PIN);
     c_timer = millis();
     // wait until either time elapsed or second PIR triggered
     while ( ! ( val2 == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
-      yield();
       delay(100);
       val2 = digitalRead(PIR2_PIN);
+      yield();
       if (val2 == HIGH) {
-        Serial.println("UP PIR Sensor 2 Motion detected!");
+        Serial.println("We have reached the top of the stairs or time is up!");
       }
       c_timer = millis();
     }
     // end animation
     for ( i = 1; i <= STEPS ; i++ ) {
-      fadeOutSingleStep(i, 100, 50, 50, 50, 50);
+      fadeOutSingleStep(i, 100, red, green, blue, white);
     }
     val2 = LOW;
-    delay(7000);
-  } else if ( val2 == HIGH ) {
-    Serial.println("UP PIR Sensor 2 Motion detected!");
+    delay(3000);
+  } else if ( dir == "DOWN" ) {
+    Serial.println("Moving down the stairs");
     s_timer = millis();
     for ( i = STEPS; i >= 1; i-- ) {
-      fadeInSingleStep(i, 100, 50, 50, 50, 50);
+      fadeInSingleStep(i, 100, red, green, blue, white);
     }
     val1 = digitalRead(PIR1_PIN);
     c_timer = millis();
     // wait until either time elapsed or second PIR triggered
     while ( ! ( val1 == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
-      yield();
       delay(100);
       val1 = digitalRead(PIR1_PIN);
+      yield();
       if (val1 == HIGH) {
-        Serial.println("UP PIR Sensor 1 Motion detected!");
+        Serial.println("We have reached the bottom of the stairs or time is up!");
       }
       c_timer = millis();
     }
     // end animation
     for ( i = STEPS; i >= 1 ; i-- ) {
-      fadeOutSingleStep(i, 100, 50, 50, 50, 50);
+      fadeOutSingleStep(i, 100, red, green, blue, white);
     }
     val1 = LOW;
-    delay(7000);
-  }
-  count++;
-  Serial.print(".");
-  if (count>100) {
-    Serial.println(".");
-    count = 0;
+    delay(3000);
   }
   yield();
   delay(200);
