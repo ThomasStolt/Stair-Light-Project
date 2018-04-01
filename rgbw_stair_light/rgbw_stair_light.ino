@@ -34,6 +34,7 @@
 #include <ESP8266HTTPClient.h>
 #include <ESP8266httpUpdate.h>
 #include <credentials.h>
+#include <Ticker.h>
 
 #ifdef __AVR__
   #include <avr/power.h>
@@ -85,6 +86,20 @@ int gammaw[] = {
 
 #include "parking.h"
 
+Ticker secondTick;
+volatile int watchdogCount = 0;
+
+void ISRwatchdog() {
+  watchdogCount++;
+  if (watchdogCount == 60) {
+    Serial.println();
+    Serial.println("the watchdog bites!!!");
+    ESP.restart();
+  }
+
+}
+
+
 void setup() {
   // Setting up the serial line
   Serial.begin(115200);
@@ -92,6 +107,9 @@ void setup() {
   USE_SERIAL.println();
   USE_SERIAL.println();
   USE_SERIAL.println();
+
+  secondTick.attach(1,ISRwatchdog);
+
 
   for( uint8_t t = 4; t > 0; t-- ) {
     USE_SERIAL.printf("[SETUP] WAIT %d...\n", t);
@@ -168,11 +186,13 @@ void setup() {
   
 void loop() {
   Serial.println("");
+  
   int count = 0; // need this for some nicer debug output, so that we can see whether it is still working
   int val1, val2; // Value for PIR Sensor 1 and 2
   String dir, trig = "";
   
   while (true) {
+    watchdogCount = 0;
     // figure out, which IR sensor has been triggered first
     if ( digitalRead(PIR1_PIN) == HIGH ) { dir = "UP"; trig = "yes"; }
     if ( digitalRead(PIR2_PIN) == HIGH ) { dir = "DOWN"; trig = "yes"; }
@@ -190,7 +210,7 @@ void loop() {
           FadeToFullBrightness(dir);
           break;
         case 4:
-          starLight(dir);
+          starSparkle(dir);
           break;
       }
     }

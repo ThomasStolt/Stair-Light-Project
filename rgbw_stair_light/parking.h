@@ -1,39 +1,32 @@
-//////////////////////////////////
-//  PARKING
-//////////////////////////////////
-//
-// Measuring elapsed time in milliseconds
-// uint32 t_1, t_2;
-// uint32 cpu_time_used;
-// t_1 = millis();
-// t_2 = millis();
-// Serial.print("t_1: ");
-// Serial.println(t_1);
-// Serial.print("t_2: ");
-// Serial.println(t_2);
-// Serial.print("CPU time used: ");
-// Serial.println(t_2 - t_1);
-//
-//
-// TESTING PIRs
-/////////////////////////////////
-// while (true) {
-//     val1 = digitalRead(PIR1_PIN);  // read input value of PIR 1
-//     val2 = digitalRead(PIR2_PIN);  // read input value of PIR 2
-//     if ( val1 == HIGH ) {
-//       strip.setPixelColor(0, 0, 200, 0, 50);
-//     } else if ( val1 == LOW ) {
-//       strip.setPixelColor(0, 0, 0, 0, 0);
-//     }
-//     if ( val2 == HIGH ) {
-//       strip.setPixelColor(26, 0, 200, 0, 50);
-//     } else if ( val2 == LOW ) {
-//       strip.setPixelColor(26, 0, 0, 0, 0);
-//     }
-//     strip.show();
-//     yield();
-//     delay(20);
-//   }
+
+// ===================================================================================
+// FUNCTION NAME
+// testPIRs
+// -----------------------------------------------------------------------------------
+// Continiously reads the PIRs and switches the first or last LED of the first step
+// to full green
+// -----------------------------------------------------------------------------------
+void testPIRs () {
+  while (true) {
+    int val1, val2;
+    val1 = digitalRead(PIR1_PIN);  // read input value of PIR 1
+    val2 = digitalRead(PIR2_PIN);  // read input value of PIR 2
+    if ( val1 == HIGH ) {
+      strip.setPixelColor(0, 0, 200, 0, 50);
+    } else if ( val1 == LOW ) {
+      strip.setPixelColor(0, 0, 0, 0, 0);
+    }
+    if ( val2 == HIGH ) {
+      strip.setPixelColor(26, 0, 200, 0, 50);
+    } else if ( val2 == LOW ) {
+      strip.setPixelColor(26, 0, 0, 0, 0);
+    }
+    strip.show();
+    yield();
+    delay(20);
+  }
+}
+
 
 // This function fadeInSingleStep will fade a single step number step_number from zero (off)
 // to the values red, green, blue within the allotted time fade_time_ms (in milliseconds)
@@ -77,7 +70,16 @@ uint32_t Wheel(byte WheelPos) {
   WheelPos -= 170;
   return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0,0);
 }
+// -----------------------------------------------------------------------------------
 
+
+// ===================================================================================
+// NAME
+// fadeInSingleStep
+// -----------------------------------------------------------------------------------
+// SHORT DESCRIPTION
+// this fades in all LEDs of a given step from 0 within a given fade time
+// -----------------------------------------------------------------------------------
 void fadeInSingleStep(int step_number, int fade_time_ms, int red, int green, int blue, int white){
   int i, j; 
   float i_1, step_width;
@@ -104,7 +106,16 @@ void fadeInSingleStep(int step_number, int fade_time_ms, int red, int green, int
   }
   delay(10);
 }
+// -----------------------------------------------------------------------------------
 
+
+// ===================================================================================
+// NAME
+// fadeOutSingleStep
+// -----------------------------------------------------------------------------------
+// SHORT DESCRIPTION
+// this fades out all LEDs of a given step to 0 within a given fade time
+// -----------------------------------------------------------------------------------
 void fadeOutSingleStep(int step_number, int fade_time_ms, int red, int green, int blue, int white){
   int i, j;
   float i_1, step_width;
@@ -131,6 +142,8 @@ void fadeOutSingleStep(int step_number, int fade_time_ms, int red, int green, in
   }
   delay(10);
 }
+// -----------------------------------------------------------------------------------
+
 
 // ===================================================================================
 // NAME
@@ -195,86 +208,70 @@ void FadeToFullBrightness(String dir){
   yield();
   delay(200);
 }
-// =
+// -----------------------------------------------------------------------------------
+
 
 // ===================================================================================
 // NAME
-// starLight
+// starSparkle
 // -----------------------------------------------------------------------------------
 // SHORT DESCRIPTION
 // Sparkling stars on dark blue backdrop
 // -----------------------------------------------------------------------------------
-void starLight(String dir){
-  Serial.println("StarLight");
-  int count = 0, i, val1, val2;
-  unsigned long s_timer = millis();
+void starSparkle(String dir){
+  Serial.println("starSparkle");
+  int count = 0, i, minStars = 10, maxStars = 20;
+  unsigned long s_timer =  millis();
   unsigned long c_timer;
-
-  if (dir == "UP") { // are we moving up the stairs?
+  if (dir == "UP") { // We are moving up the stairs
     Serial.println("Moving up the stairs");
-    for ( i = 1; i <= STEPS; i++ ) {
-      fadeInSingleStep(i, 75, 0, 0, 200, 0);
-    }
+    for ( i = 1; i <= STEPS; i++ ) { fadeInSingleStep(i, 75, 0, 0, 30, 0); }
     c_timer = millis();
-    // wait until either time elapsed or second PIR triggered
     while ( ! ( digitalRead(PIR2_PIN) == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
-      // set between 20 and 40 random LEDs to full white
-      for ( i = 1; i < random(40,80); i++) {
-        strip.setPixelColor(random(0,NUM_LEDS), 255, 255, 255, 255);
-      }
-        strip.show();
-        setAll(0,0,200,0);
-        strip.show();
-        yield();
-      if ( digitalRead(PIR1_PIN) == HIGH ) {
-        Serial.println("We have reached the top of the stairs or time is up!");
-      }
-      // set c_timer to the current time
-      c_timer = millis();
-    }
-    // end animation
-    for ( i = 1; i <= STEPS ; i++ ) {
-      fadeOutSingleStep(i, 75, 0, 0, 200, 0);
-    }
-    delay(2000);
-    
-  } else if ( dir == "DOWN" ) {
-    
-    Serial.println("Moving down the stairs");
-    s_timer = millis();
-    for ( i = STEPS; i >= 1; i-- ) {
-      fadeInSingleStep(i, 75, 0, 0, 200, 0);
-    }
-    c_timer = millis();
-    // wait until either time elapsed or second PIR triggered
-    while ( ! ( digitalRead(PIR1_PIN) == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
-      // set between 20 and 40 random LEDs to full white
-      for ( i = 1; i < random(40,80); i++) {
+      for ( i = 1; i < random(minStars,maxStars); i++) {
         strip.setPixelColor(random(0,NUM_LEDS), 255, 255, 255, 255);
       }
       strip.show();
-      setAll(0,0,200,0);
+      setAll(0,0,30,0);
       strip.show();
       yield();
-      if ( digitalRead(PIR2_PIN) == HIGH) {
-        Serial.println("We have reached the bottom of the stairs or time is up!");
-      }
+      if ( digitalRead(PIR2_PIN) == HIGH ) { Serial.println("We have reached the top of the stairs!"); }
       c_timer = millis();
     }
-    // end animation
-    for ( i = STEPS; i >= 1 ; i-- ) {
-      fadeOutSingleStep(i, 75, 0, 0, 200, 0);
+    for ( i = 1; i <= STEPS ; i++ ) { fadeOutSingleStep(i, 75, 0, 0, 30, 0); }
+    delay(2500);    
+  } else if ( dir == "DOWN" ) {    
+    Serial.println("Moving down the stairs");
+    for ( i = STEPS; i >= 1; i-- ) { fadeInSingleStep(i, 75, 0, 0, 30, 0); }
+    c_timer = millis();
+    while ( ! ( digitalRead(PIR1_PIN) == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
+      for ( i = 1; i < random(minStars,maxStars); i++) {
+        strip.setPixelColor(random(0,NUM_LEDS), 255, 255, 255, 255);
+      }
+      strip.show();
+      setAll(0,0,30,0);
+      strip.show();
+      yield();
+      if ( digitalRead(PIR1_PIN) == HIGH) { Serial.println("We have reached the bottom of the stairs!"); }
+      c_timer = millis();
     }
-    delay(2000);
+    for ( i = STEPS; i >= 1 ; i-- ) { fadeOutSingleStep(i, 75, 0, 0, 30, 0); }
+    delay(2500);
   }
   yield();
   delay(200);
 }
-// ======================
+// -----------------------------------------------------------------------------------
 
 
 
-
+// ===================================================================================
+// NAME
+// simpleFadeToRandom
+// -----------------------------------------------------------------------------------
+// SHORT DESCRIPTION
+// Fades all stairs to a random colour, no animation
+// -----------------------------------------------------------------------------------
 void simpleFadeToRandom(String dir){
   Serial.println("SimpleFadeToRandom");
   int count = 0, i, val1, val2;
@@ -336,7 +333,14 @@ void simpleFadeToRandom(String dir){
   delay(200);
 }
 
+
+// ===================================================================================
+// NAME
+// setStep
+// -----------------------------------------------------------------------------------
+// SHORT DESCRIPTION
 // sets all NeoPixels of step s to the color c
+// -----------------------------------------------------------------------------------
 void setStep(int s, int c){
   int step_start = (s - 1) * WIDTH;
   int step_end = step_start + WIDTH;
@@ -344,15 +348,20 @@ void setStep(int s, int c){
     strip.setPixelColor(i, c);
     yield();
   }
-  // rastrip.show();
+  // strip.show();
 }
 
+
+// ===================================================================================
+// NAME
+// rainbowSteps
+// -----------------------------------------------------------------------------------
+// SHORT DESCRIPTION
+// fades all steps in, to rainbow colours, then rainbow animation, then fade out
+// -----------------------------------------------------------------------------------
 void rainbowSteps(String dir){
   Serial.println("rainbowSteps");
-//
   int i, j, k;
-
-  
   if (dir == "DOWN") { // are we moving down the stairs?
     Serial.println("Moving down the stairs");
     for (j=STEPS;j>=0;j--){
@@ -395,23 +404,24 @@ void rainbowSteps(String dir){
 }
 
 
-
-
-
+// ===================================================================================
+// NAME
+// setStepRndm
+// -----------------------------------------------------------------------------------
+// SHORT DESCRIPTION
+// Sets all pixels to a random colour - ONLY ON BIRTHDAYS!!!
+// -----------------------------------------------------------------------------------
 void setStepRndm(int s, int c){
-  // sets all NeoPixels of step s to a random colour per pixel
-  // Figure out the first pixel of step s
   int step_start = (s - 1) * WIDTH;
-  // Figure out the last pixel of step s
   int step_end = step_start + WIDTH;
   for(int i=step_start;i<step_end;i++){
     c = random(16711680);
-    // Serial.println(c);
     strip.setPixelColor(i, c);
     yield();
   }
   strip.show();
 }
+
 
 void fadeStep(int red, int green, int blue, int white){
   // This function fades each step after the other to the
