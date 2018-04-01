@@ -3,10 +3,6 @@
 This is the Stair Light Project, started in October 2016. It is now March 2018 and the project is nearing its first completion. The idea is to create a nice, animated and automated light using SK6812 RBGW LEDs, to make it even more enjoyable to walk up (or down) the stairs.
 Each step is equipped with a bar of (in my case) 27 RGBW LEDs. The first and last step each have an IR sensor (SR-HC501) which will trigger an animation, if somebody walks the stairs.
 
-### What is this repository for? ###
-
-As stated: for a cool stair light
-
 ### How do I get set up? ###
 
 This project is based on RGBW LED stripes (I am using SK6812, according to some internet sources, they are supposed to be more robust, but fully compatible to the "normal" WS2812) and an ESP8266 as a controller.
@@ -26,6 +22,10 @@ I am looking for contributors who would be willing to come up with some cool ani
 </table>
 
 I am trying to come up with a sort of "API" whereby all parameters for an animation is being passed to a animation function. That way, I can keep the general framework the same and people can add animations, if they wish to.
+
+### Features ###
+
+Over the Air Updates: I have it set up that I can develop my animations having my test bed sitting next to me on the desk. If I am happy with the result, I upload the binary to a webserver. Upon restart or MQTT message (to be implemented) the ESP then gets the new binary from that webserver and restarts. Hands-free updates!
 
 ### Who do I talk to? ###
 
