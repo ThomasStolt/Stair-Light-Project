@@ -39,6 +39,45 @@
 // to the values red, green, blue within the allotted time fade_time_ms (in milliseconds)
 // A reverse functionality is provided by the function fadeOutSingleStep
 
+
+// ===================================================================================
+// NAME
+// setAll
+// -----------------------------------------------------------------------------------
+// SHORT DESCRIPTION
+// This function sets all LEDs of strip to the colours passed to it
+// -----------------------------------------------------------------------------------
+void setAll(int red, int green, int blue, int white){
+  for(int i=0;i<NUM_LEDS;i++){
+    strip.setPixelColor(i, strip.Color(red,green,blue,white));
+  }
+}
+
+uint8_t red(uint32_t c) {
+  return (c >> 8);
+}
+uint8_t green(uint32_t c) {
+  return (c >> 16);
+}
+uint8_t blue(uint32_t c) {
+  return (c);
+}
+
+// Input a value 0 to 255 to get a color value.
+// The colours are a transition r - g - b - back to r.
+uint32_t Wheel(byte WheelPos) {
+  WheelPos = 255 - WheelPos;
+  if(WheelPos < 85) {
+    return strip.Color(255 - WheelPos * 3, 0, WheelPos * 3,0);
+  }
+  if(WheelPos < 170) {
+    WheelPos -= 85;
+    return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3,0);
+  }
+  WheelPos -= 170;
+  return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0,0);
+}
+
 void fadeInSingleStep(int step_number, int fade_time_ms, int red, int green, int blue, int white){
   int i, j; 
   float i_1, step_width;
@@ -93,24 +132,158 @@ void fadeOutSingleStep(int step_number, int fade_time_ms, int red, int green, in
   delay(10);
 }
 
+// ===================================================================================
+// NAME
+// FadeToFullBrightness
+// -----------------------------------------------------------------------------------
+// SHORT DESCRIPTION
+// This function fades all LEDs to full brighness
+// -----------------------------------------------------------------------------------
+void FadeToFullBrightness(String dir){
+  Serial.println("FadeFullBrightness");
+  int count = 0, i, val1, val2;
+  unsigned long s_timer = millis();
+  unsigned long c_timer;
+  if (dir == "UP") { // are we moving up the stairs?
+    Serial.println("Moving up the stairs");
+    for ( i = 1; i <= STEPS; i++ ) {
+      fadeInSingleStep(i, 100, 255, 255, 255, 255);
+    }
+    val2 = digitalRead(PIR2_PIN);
+    c_timer = millis();
+    // wait until either time elapsed or second PIR triggered
+    while ( ! ( val2 == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
+      delay(100);
+      val2 = digitalRead(PIR2_PIN);
+      yield();
+      if (val2 == HIGH) {
+        Serial.println("We have reached the top of the stairs or time is up!");
+      }
+      c_timer = millis();
+    }
+    // end animation
+    for ( i = 1; i <= STEPS ; i++ ) {
+      fadeOutSingleStep(i, 100, 255, 255, 255, 255);
+    }
+    val2 = LOW;
+    delay(3000);
+  } else if ( dir == "DOWN" ) {
+    Serial.println("Moving down the stairs");
+    s_timer = millis();
+    for ( i = STEPS; i >= 1; i-- ) {
+      fadeInSingleStep(i, 100, 255, 255, 255, 255);
+    }
+    val1 = digitalRead(PIR1_PIN);
+    c_timer = millis();
+    // wait until either time elapsed or second PIR triggered
+    while ( ! ( val1 == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
+      delay(100);
+      val1 = digitalRead(PIR1_PIN);
+      yield();
+      if (val1 == HIGH) {
+        Serial.println("We have reached the bottom of the stairs or time is up!");
+      }
+      c_timer = millis();
+    }
+    // end animation
+    for ( i = STEPS; i >= 1 ; i-- ) {
+      fadeOutSingleStep(i, 100, 255, 255, 255, 255);
+    }
+    val1 = LOW;
+    delay(3000);
+  }
+  yield();
+  delay(200);
+}
+// =
+
+// ===================================================================================
+// NAME
+// starLight
+// -----------------------------------------------------------------------------------
+// SHORT DESCRIPTION
+// Sparkling stars on dark blue backdrop
+// -----------------------------------------------------------------------------------
+void starLight(String dir){
+  Serial.println("StarLight");
+  int count = 0, i, val1, val2;
+  unsigned long s_timer = millis();
+  unsigned long c_timer;
+
+  if (dir == "UP") { // are we moving up the stairs?
+    Serial.println("Moving up the stairs");
+    for ( i = 1; i <= STEPS; i++ ) {
+      fadeInSingleStep(i, 75, 0, 0, 200, 0);
+    }
+    c_timer = millis();
+    // wait until either time elapsed or second PIR triggered
+    while ( ! ( digitalRead(PIR2_PIN) == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
+      // set between 20 and 40 random LEDs to full white
+      for ( i = 1; i < random(40,80); i++) {
+        strip.setPixelColor(random(0,NUM_LEDS), 255, 255, 255, 255);
+      }
+        strip.show();
+        setAll(0,0,200,0);
+        strip.show();
+        yield();
+      if ( digitalRead(PIR1_PIN) == HIGH ) {
+        Serial.println("We have reached the top of the stairs or time is up!");
+      }
+      // set c_timer to the current time
+      c_timer = millis();
+    }
+    // end animation
+    for ( i = 1; i <= STEPS ; i++ ) {
+      fadeOutSingleStep(i, 75, 0, 0, 200, 0);
+    }
+    delay(2000);
+    
+  } else if ( dir == "DOWN" ) {
+    
+    Serial.println("Moving down the stairs");
+    s_timer = millis();
+    for ( i = STEPS; i >= 1; i-- ) {
+      fadeInSingleStep(i, 75, 0, 0, 200, 0);
+    }
+    c_timer = millis();
+    // wait until either time elapsed or second PIR triggered
+    while ( ! ( digitalRead(PIR1_PIN) == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
+      // set between 20 and 40 random LEDs to full white
+      for ( i = 1; i < random(40,80); i++) {
+        strip.setPixelColor(random(0,NUM_LEDS), 255, 255, 255, 255);
+      }
+      strip.show();
+      setAll(0,0,200,0);
+      strip.show();
+      yield();
+      if ( digitalRead(PIR2_PIN) == HIGH) {
+        Serial.println("We have reached the bottom of the stairs or time is up!");
+      }
+      c_timer = millis();
+    }
+    // end animation
+    for ( i = STEPS; i >= 1 ; i-- ) {
+      fadeOutSingleStep(i, 75, 0, 0, 200, 0);
+    }
+    delay(2000);
+  }
+  yield();
+  delay(200);
+}
+// ======================
 
 
-void simple_fade(String dir){
+
+
+void simpleFadeToRandom(String dir){
+  Serial.println("SimpleFadeToRandom");
   int count = 0, i, val1, val2;
   unsigned long s_timer = millis();
   unsigned long c_timer;
   int red = random(256);
-  Serial.print("red: ");
-  Serial.println(red);
   int green = random(256);
-  Serial.print("green: ");
-  Serial.println(green);  
   int blue = random(256);
-  Serial.print("blue: ");
-  Serial.println(blue);  
   int white = random(256);
-  Serial.print("white: ");
-  Serial.println(white);
   if (dir == "UP") { // are we moving up the stairs?
     Serial.println("Moving up the stairs");
     for ( i = 1; i <= STEPS; i++ ) {
@@ -171,14 +344,65 @@ void setStep(int s, int c){
     strip.setPixelColor(i, c);
     yield();
   }
-  strip.show();
+  // rastrip.show();
 }
 
-// sets all NeoPixels of step s to a random colour per pixel
+void rainbowSteps(String dir){
+  Serial.println("rainbowSteps");
+//
+  int i, j, k;
+
+  
+  if (dir == "DOWN") { // are we moving down the stairs?
+    Serial.println("Moving down the stairs");
+    for (j=STEPS;j>=0;j--){
+      fadeInSingleStep(j, 100, red(Wheel(int(((j-1)*255/STEPS)))), green(Wheel(int(((j-1)*255/STEPS)))), blue(Wheel(int(((j-1)*255/STEPS)))),0);
+    }
+    
+    for (k=0;k<2;k++) {
+      for (i=0;i<256;i=i+2){
+        for (j=1;j<=STEPS;j++){
+          setStep(j,Wheel(int(i + ((j-1) * 255 / STEPS))));
+        }
+        strip.show();
+        yield();
+      }
+    }
+    for (j=STEPS;j>=0;j--){
+      fadeOutSingleStep(j, 30, red(Wheel(int(((j-1)*255/STEPS)))), green(Wheel(int(((j-1)*255/STEPS)))), blue(Wheel(int(((j-1)*255/STEPS)))),0);
+    }
+
+  } else if ( dir == "UP" ) {
+    Serial.println("Moving up the stairs");
+
+    for (j=1;j<=STEPS;j++){
+      fadeInSingleStep(j, 100, red(Wheel(int(((j-1)*255/STEPS)))), green(Wheel(int(((j-1)*255/STEPS)))), blue(Wheel(int(((j-1)*255/STEPS)))),0);
+    }
+        
+    for (k=0;k<2;k++) {
+      for (i=256;i>0;i--){
+        for (j=1;j<=STEPS;j++){
+          setStep(j,Wheel(int(i + ((j-1) * 255 / STEPS))));
+        }
+        strip.show();
+        yield();
+      }
+    }
+     for (j=1;j<=STEPS;j++){
+      fadeOutSingleStep(j, 30, red(Wheel(int(((j-1)*255/STEPS)))), green(Wheel(int(((j-1)*255/STEPS)))), blue(Wheel(int(((j-1)*255/STEPS)))),0);
+    }
+  }
+}
+
+
+
+
+
 void setStepRndm(int s, int c){
-  // defines, which pixel is the beginning of the step
+  // sets all NeoPixels of step s to a random colour per pixel
+  // Figure out the first pixel of step s
   int step_start = (s - 1) * WIDTH;
-  // defines, which pixel is the end of the step
+  // Figure out the last pixel of step s
   int step_end = step_start + WIDTH;
   for(int i=step_start;i<step_end;i++){
     c = random(16711680);
@@ -190,11 +414,13 @@ void setStepRndm(int s, int c){
 }
 
 void fadeStep(int red, int green, int blue, int white){
+  // This function fades each step after the other to the
+  // colour (red,green,blue,white)
   int i, j, s;
-  // defines, which pixel is the beginning of the step
   for (s=1;s<=STEPS;s++) {
+    // Figure out the first pixel of step s
     int step_start = (s - 1) * WIDTH;
-    // defines, which pixel is the end of the step
+    // Figure out the last pixel of step s
     int step_end = step_start + WIDTH;
     Serial.print("Step start: ");
     Serial.println(step_start+1);
@@ -207,6 +433,212 @@ void fadeStep(int red, int green, int blue, int white){
       }
       strip.show();
     }
+  }
+}
+
+// Fill the dots one after the other with a color
+void colorWipe(uint32_t c, uint8_t wait) {
+  for(uint16_t i=0; i<strip.numPixels(); i++) {
+    strip.setPixelColor(i, c);
+    strip.show();
+    delay(wait);
+  }
+}
+
+// Fade Function:
+void FadeInOut(byte red, byte green, byte blue, byte white){
+  float r, g, b, w;
+  for(int k = 0; k < 156; k=k+1) { 
+    r = (k/156.0)*red;
+    g = (k/156.0)*green;
+    b = (k/156.0)*blue;
+    w = (k/156.0)*white;
+    setAll(r,g,b,w);
+    strip.show();
+  }
+  
+  for(int k = 156; k >= 0; k=k-2) {
+    r = (k/156.0)*red;
+    g = (k/156.0)*green;
+    b = (k/156.0)*blue;
+    w = (k/156.0)*white;
+    setAll(r,g,b,w);
+    strip.show();
+  }
+}
+
+void pulseWhite(uint8_t wait) {
+  for(int j = 0; j < 256 ; j++){
+      for(uint16_t i=0; i<strip.numPixels(); i++) {
+          strip.setPixelColor(i, strip.Color(0,0,0, gammaw[j] ) );
+        }
+        delay(wait);
+        strip.show();
+      }
+
+  for(int j = 255; j >= 0 ; j--){
+      for(uint16_t i=0; i<strip.numPixels(); i++) {
+          strip.setPixelColor(i, strip.Color(0,0,0, gammaw[j] ) );
+        }
+        delay(wait);
+        strip.show();
+      }
+}
+
+
+
+
+
+
+
+
+void rainbowFade2White(uint8_t wait, int rainbowLoops, int whiteLoops) {
+  float fadeMax = 100.0;
+  int fadeVal = 0;
+  uint32_t wheelVal;
+  int redVal, greenVal, blueVal;
+
+  for(int k = 0 ; k < rainbowLoops ; k ++){
+    
+    for(int j=0; j<256; j++) { // 5 cycles of all colors on wheel
+
+      for(int i=0; i< strip.numPixels(); i++) {
+
+        wheelVal = Wheel(((i * 256 / strip.numPixels()) + j) & 255);
+
+        redVal = red(wheelVal) * float(fadeVal/fadeMax);
+        greenVal = green(wheelVal) * float(fadeVal/fadeMax);
+        blueVal = blue(wheelVal) * float(fadeVal/fadeMax);
+
+        strip.setPixelColor( i, strip.Color( redVal, greenVal, blueVal ) );
+
+      }
+      // First loop, fade in!
+      if(k == 0 && fadeVal < fadeMax-1) {
+          fadeVal++;
+      }
+      // Last loop, fade out!
+      else if(k == rainbowLoops - 1 && j > 255 - fadeMax ){
+          fadeVal--;
+      }
+        strip.show();
+        delay(wait);
+    }
+  
+  }
+  delay(500);
+  for(int k = 0 ; k < whiteLoops ; k ++){
+    for(int j = 0; j < 256 ; j++){
+      for(uint16_t i=0; i < strip.numPixels(); i++) {
+        strip.setPixelColor(i, strip.Color(0,0,0, gammaw[j] ) );
+        yield();
+      }
+      strip.show();
+    }
+    delay(2000);
+    for(int j = 255; j >= 0; j--){
+      for(uint16_t i=0; i < strip.numPixels(); i++) {
+        strip.setPixelColor(i, strip.Color(0,0,0, gammaw[j] ) );
+      }
+    strip.show();
+    }
+  }
+  delay(500);
+}
+
+void whiteOverRainbow(uint8_t wait, uint8_t whiteSpeed, uint8_t whiteLength ) {
+  
+  if(whiteLength >= strip.numPixels()) whiteLength = strip.numPixels() - 1;
+
+  int head = whiteLength - 1;
+  int tail = 0;
+
+  int loops = 3;
+  int loopNum = 0;
+
+  static unsigned long lastTime = 0;
+
+  while(true){
+    for(int j=0; j<256; j++) {
+      for(uint16_t i=0; i<strip.numPixels(); i++) {
+        if((i >= tail && i <= head) || (tail > head && i >= tail) || (tail > head && i <= head) ){
+          strip.setPixelColor(i, strip.Color(0,0,0, 255 ) );
+        }
+        else{
+          strip.setPixelColor(i, Wheel(((i * 256 / strip.numPixels()) + j) & 255));
+        }
+        
+      }
+
+      if(millis() - lastTime > whiteSpeed) {
+        head++;
+        tail++;
+        if(head == strip.numPixels()){
+          loopNum++;
+        }
+        lastTime = millis();
+      }
+
+      if(loopNum == loops) return;
+    
+      head%=strip.numPixels();
+      tail%=strip.numPixels();
+        strip.show();
+        delay(wait);
+    }
+  }  
+
+}
+
+// Full White Cold
+void fullWhiteC() {
+  
+    for(uint16_t i=0; i<strip.numPixels(); i++) {
+        strip.setPixelColor(i, strip.Color(0,0,0, BRIGHTNESS ) );
+    }
+      strip.show();
+}
+
+// Full White Warm
+void fullWhiteW() {
+  
+    for(uint16_t i=0; i<strip.numPixels(); i++) {
+        strip.setPixelColor(i, strip.Color(BRIGHTNESS,BRIGHTNESS,BRIGHTNESS, 0 ) );
+    }
+      strip.show();
+}
+
+// Full White Warm and Cold
+void fullWhiteWC() {
+  
+    for(uint16_t i=0; i<strip.numPixels(); i++) {
+        strip.setPixelColor(i, strip.Color(BRIGHTNESS,BRIGHTNESS,BRIGHTNESS, BRIGHTNESS ) );
+    }
+      strip.show();
+}
+
+// Slightly different, this makes the rainbow equally distributed throughout
+void rainbowCycle(uint8_t wait) {
+  uint16_t i, j;
+
+  for(j=0; j<256 * 5; j++) { // 5 cycles of all colors on wheel
+    for(i=0; i< strip.numPixels(); i++) {
+      strip.setPixelColor(i, Wheel(((i * 256 / strip.numPixels()) + j) & 255));
+    }
+    strip.show();
+    delay(wait);
+  }
+}
+
+void rainbow(uint8_t wait) {
+  uint16_t i, j;
+
+  for(j=0; j<256; j++) {
+    for(i=0; i<strip.numPixels(); i++) {
+      strip.setPixelColor(i, Wheel((i+j) & 255));
+    }
+    strip.show();
+    delay(wait);
   }
 }
 

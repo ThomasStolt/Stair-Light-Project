@@ -2,7 +2,7 @@
 // ==========================================
 //
 // This project is using NeoPixels to illuminate individual steps of a flight of stairs
-// automatically, while someone is walking up (or down) the stairs. The project is based
+// automatically, while someone is walking up (or down) the stairs. The project is based  
 // on an ESP8266 as microcontroller, strips of SK2812 as LEDs (should be compatible to
 // WS2812) and two SR501 as motion
 // sensor. An ESP8266 is used as the microcontroller.
@@ -46,12 +46,11 @@
 #define NEOPIXEL_PIN  14          // Pin D5 == GPIO 14 -> NeoPixels
 #define PIR1_PIN 16               // Pin D0 == GPIO 16 -> PIR Sensor 1
 #define PIR2_PIN 4                // Pin D2 == GPIO 4  -> Pir Sensor 2
-// #define STEPS 16                    // how many steps do the stairs have?
-#define STEPS 5                    // how many steps do the stairs have?
+#define STEPS 16                   // how many steps do the stairs have?
 #define WIDTH 27                  // how many LEDs per step do we have?
-// #define NUM_LEDS  432             // how many LEDs do we have overall?
-#define NUM_LEDS  135             // how many LEDs do we have overall?
-#define ANIM_DURATION 20000       // how long is the animation active max? Guessing 20 seconds here
+#define NUM_LEDS (STEPS * WIDTH)  // how many LEDs do we have overall?
+#define ANIM_DURATION 20000       // how long is the animation active max? If after this time the second
+                                  // IR sensor is not triggered, we call the end of the animation
 // if BRIGHNESS is too small (around 10 or less), the animation appears 'skippy', i.e. not smooth
 // that is because there are only a few (10) levels of brighness for each color, so this is normal
 #define BRIGHTNESS 255            // limit brightness of the strip
@@ -100,11 +99,12 @@ void setup() {
     delay(1000);
   }
 
-  // setting up WiFi and printing information
-  // this comes from .arduino15/packages/esp8266/hardware/esp82766/2.4.1/libaries/credentials
-  // and needs to be created. Only here to hide my own credentials from Github ;)
+  // ========================================================================================
+  // Setting up WiFi. I am using mySSID and myPass here. They come from credentials.h located
+  // in ~/.arduino15/packages/esp8266/hardware/esp82766/2.4.1/libaries/credentials
+  // and needs to be created by you! This is only here to hide my own credentials from Github
+  // ========================================================================================
   WiFi.begin(mySSID, myPass);
-  
   Serial.print("Connecting");
   while (WiFi.status() != WL_CONNECTED)
   {
@@ -112,22 +112,31 @@ void setup() {
     Serial.print(".");
   }
   Serial.println();
-
   Serial.print("Connected, IP address: ");
   Serial.println(WiFi.localIP());
-  byte mac[6];
-  WiFi.macAddress(mac);
-  Serial.print("MAC: ");
-  for (int i = 0; i < 5; i++) {
-    Serial.print(mac[i], HEX);
-    Serial.print(":");
-  }
-  Serial.println(mac[5], HEX);
+  // print MAC address, uncomment if needed
+  // byte mac[6];
+  // WiFi.macAddress(mac);
+  // Serial.print("MAC: ");
+  // for (int i = 0; i < 5; i++) {
+  //   Serial.print(mac[i], HEX);
+  //   Serial.print(":");
+  // }
+  // Serial.println(mac[5], HEX);
+  // ========================================================================================
+  // ========================================================================================
+
   
+  // =======================================================================================
+  // Don't even touch this, it took me weeks to get this working. I am not sure why, but it
+  // does work now
   // Getting updates OTA
+  // I am thinking of making this a function and calling it at first boot (e.g. if the reset
+  // button is pressed) or through an MQTT message from a broker. But it is not that urgent.
+  // =======================================================================================
   if((WiFi.status() == WL_CONNECTED)) {
-    // t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/iotappstoryv20.php");
-    t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/bin/rgbw_stair_light");
+    t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/iotappstoryv20.php");
+    // t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/bin/rgbw_stair_light");
       switch(ret) {
         case HTTP_UPDATE_FAILED:
           USE_SERIAL.printf("HTTP_UPDATE_FAILD Error (%d): %s", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
@@ -140,10 +149,17 @@ void setup() {
         break;
       }
     }
- 
+  // =======================================================================================
+  // =======================================================================================
+  // =======================================================================================
+  
   strip.setBrightness(BRIGHTNESS);
   strip.begin(); // prepare the data pin for NeoPixel output
+  setAll(0,0,0,0);
   strip.show(); // Initialize all pixels to 'off'
+
+  // initialise the random generator
+  randomSeed(ESP.getCycleCount());
   
   pinMode(PIR1_PIN, INPUT);
   pinMode(PIR2_PIN, INPUT);
@@ -152,287 +168,40 @@ void setup() {
   
 void loop() {
   Serial.println("");
-  int i, count = 0;
-  uint32 s_timer, c_timer; // start time and current time
+  int count = 0; // need this for some nicer debug output, so that we can see whether it is still working
   int val1, val2; // Value for PIR Sensor 1 and 2
-  setAll(0,0,0,0);
+  String dir, trig = "";
+  
   while (true) {
-    val1 = digitalRead(PIR1_PIN);
-    yield();
-    delay(50);
-    val2 = digitalRead(PIR2_PIN);
-    yield();
-    delay(50);
-    if ( val1 == HIGH ) {
-      simple_fade("UP");
-      val1 = digitalRead(PIR1_PIN);
+    // figure out, which IR sensor has been triggered first
+    if ( digitalRead(PIR1_PIN) == HIGH ) { dir = "UP"; trig = "yes"; }
+    if ( digitalRead(PIR2_PIN) == HIGH ) { dir = "DOWN"; trig = "yes"; }
+    // if one of them has been triggered, choose a random function to go to
+    if ( trig == "yes" ) {
+      // switch (random(1,4)) {
+      switch (4) {
+        case 1:
+          simpleFadeToRandom(dir);
+          break;
+        case 2:
+          rainbowSteps(dir);
+          break;
+        case 3:
+          FadeToFullBrightness(dir);
+          break;
+        case 4:
+          starLight(dir);
+          break;
+      }
     }
-    if ( val2 == HIGH ) {
-      simple_fade("DOWN");
-      val2 = digitalRead(PIR2_PIN);  // read input value of PIR 2
-    }
+    trig = "";
     Serial.print(".");
     if ( count++ > 100 ) {
       Serial.println("");
       count = 0;
     }
     yield();
-    delay(200);
+    delay(100);
   }
 }
 
-
-
-
-
-
-
-
-
-// Fill the dots one after the other with a color
-void colorWipe(uint32_t c, uint8_t wait) {
-  for(uint16_t i=0; i<strip.numPixels(); i++) {
-    strip.setPixelColor(i, c);
-    strip.show();
-    delay(wait);
-  }
-}
-
-// Fade Function:
-void FadeInOut(byte red, byte green, byte blue, byte white){
-  float r, g, b, w;
-  for(int k = 0; k < 156; k=k+1) { 
-    r = (k/156.0)*red;
-    g = (k/156.0)*green;
-    b = (k/156.0)*blue;
-    w = (k/156.0)*white;
-    setAll(r,g,b,w);
-    strip.show();
-  }
-  
-  for(int k = 156; k >= 0; k=k-2) {
-    r = (k/156.0)*red;
-    g = (k/156.0)*green;
-    b = (k/156.0)*blue;
-    w = (k/156.0)*white;
-    setAll(r,g,b,w);
-    strip.show();
-  }
-}
-
-void setAll(int red, int green, int blue, int white){
-
-  for(int i=0;i<NUM_LEDS;i++){
-    // pixels.Color takes RGBW values, from 0,0,0,0 up to 255,255,255,255
-    strip.setPixelColor(i, strip.Color(red,green,blue,white));
-    // strip.show(); // This sends the updated pixel color to the hardware.
-  }
-}
-
-void pulseWhite(uint8_t wait) {
-  for(int j = 0; j < 256 ; j++){
-      for(uint16_t i=0; i<strip.numPixels(); i++) {
-          strip.setPixelColor(i, strip.Color(0,0,0, gammaw[j] ) );
-        }
-        delay(wait);
-        strip.show();
-      }
-
-  for(int j = 255; j >= 0 ; j--){
-      for(uint16_t i=0; i<strip.numPixels(); i++) {
-          strip.setPixelColor(i, strip.Color(0,0,0, gammaw[j] ) );
-        }
-        delay(wait);
-        strip.show();
-      }
-}
-
-
-void rainbowFade2White(uint8_t wait, int rainbowLoops, int whiteLoops) {
-  float fadeMax = 100.0;
-  int fadeVal = 0;
-  uint32_t wheelVal;
-  int redVal, greenVal, blueVal;
-
-  for(int k = 0 ; k < rainbowLoops ; k ++){
-    
-    for(int j=0; j<256; j++) { // 5 cycles of all colors on wheel
-
-      for(int i=0; i< strip.numPixels(); i++) {
-
-        wheelVal = Wheel(((i * 256 / strip.numPixels()) + j) & 255);
-
-        redVal = red(wheelVal) * float(fadeVal/fadeMax);
-        greenVal = green(wheelVal) * float(fadeVal/fadeMax);
-        blueVal = blue(wheelVal) * float(fadeVal/fadeMax);
-
-        strip.setPixelColor( i, strip.Color( redVal, greenVal, blueVal ) );
-
-      }
-
-      // First loop, fade in!
-      if(k == 0 && fadeVal < fadeMax-1) {
-          fadeVal++;
-      }
-
-      // Last loop, fade out!
-      else if(k == rainbowLoops - 1 && j > 255 - fadeMax ){
-          fadeVal--;
-      }
-
-        strip.show();
-        delay(wait);
-    }
-  
-  }
-
-
-
-  delay(500);
-
-
-  for(int k = 0 ; k < whiteLoops ; k ++){
-
-    for(int j = 0; j < 256 ; j++){
-
-        for(uint16_t i=0; i < strip.numPixels(); i++) {
-            strip.setPixelColor(i, strip.Color(0,0,0, gammaw[j] ) );
-          }
-          strip.show();
-        }
-
-        delay(2000);
-    for(int j = 255; j >= 0 ; j--){
-
-        for(uint16_t i=0; i < strip.numPixels(); i++) {
-            strip.setPixelColor(i, strip.Color(0,0,0, gammaw[j] ) );
-          }
-          strip.show();
-        }
-  }
-
-  delay(500);
-
-
-}
-
-void whiteOverRainbow(uint8_t wait, uint8_t whiteSpeed, uint8_t whiteLength ) {
-  
-  if(whiteLength >= strip.numPixels()) whiteLength = strip.numPixels() - 1;
-
-  int head = whiteLength - 1;
-  int tail = 0;
-
-  int loops = 3;
-  int loopNum = 0;
-
-  static unsigned long lastTime = 0;
-
-  while(true){
-    for(int j=0; j<256; j++) {
-      for(uint16_t i=0; i<strip.numPixels(); i++) {
-        if((i >= tail && i <= head) || (tail > head && i >= tail) || (tail > head && i <= head) ){
-          strip.setPixelColor(i, strip.Color(0,0,0, 255 ) );
-        }
-        else{
-          strip.setPixelColor(i, Wheel(((i * 256 / strip.numPixels()) + j) & 255));
-        }
-        
-      }
-
-      if(millis() - lastTime > whiteSpeed) {
-        head++;
-        tail++;
-        if(head == strip.numPixels()){
-          loopNum++;
-        }
-        lastTime = millis();
-      }
-
-      if(loopNum == loops) return;
-    
-      head%=strip.numPixels();
-      tail%=strip.numPixels();
-        strip.show();
-        delay(wait);
-    }
-  }  
-
-}
-
-// Full White Cold
-void fullWhiteC() {
-  
-    for(uint16_t i=0; i<strip.numPixels(); i++) {
-        strip.setPixelColor(i, strip.Color(0,0,0, BRIGHTNESS ) );
-    }
-      strip.show();
-}
-
-// Full White Warm
-void fullWhiteW() {
-  
-    for(uint16_t i=0; i<strip.numPixels(); i++) {
-        strip.setPixelColor(i, strip.Color(BRIGHTNESS,BRIGHTNESS,BRIGHTNESS, 0 ) );
-    }
-      strip.show();
-}
-
-// Full White Warm and Cold
-void fullWhiteWC() {
-  
-    for(uint16_t i=0; i<strip.numPixels(); i++) {
-        strip.setPixelColor(i, strip.Color(BRIGHTNESS,BRIGHTNESS,BRIGHTNESS, BRIGHTNESS ) );
-    }
-      strip.show();
-}
-
-// Slightly different, this makes the rainbow equally distributed throughout
-void rainbowCycle(uint8_t wait) {
-  uint16_t i, j;
-
-  for(j=0; j<256 * 5; j++) { // 5 cycles of all colors on wheel
-    for(i=0; i< strip.numPixels(); i++) {
-      strip.setPixelColor(i, Wheel(((i * 256 / strip.numPixels()) + j) & 255));
-    }
-    strip.show();
-    delay(wait);
-  }
-}
-
-void rainbow(uint8_t wait) {
-  uint16_t i, j;
-
-  for(j=0; j<256; j++) {
-    for(i=0; i<strip.numPixels(); i++) {
-      strip.setPixelColor(i, Wheel((i+j) & 255));
-    }
-    strip.show();
-    delay(wait);
-  }
-}
-
-// Input a value 0 to 255 to get a color value.
-// The colours are a transition r - g - b - back to r.
-uint32_t Wheel(byte WheelPos) {
-  WheelPos = 255 - WheelPos;
-  if(WheelPos < 85) {
-    return strip.Color(255 - WheelPos * 3, 0, WheelPos * 3,0);
-  }
-  if(WheelPos < 170) {
-    WheelPos -= 85;
-    return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3,0);
-  }
-  WheelPos -= 170;
-  return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0,0);
-}
-
-uint8_t red(uint32_t c) {
-  return (c >> 8);
-}
-uint8_t green(uint32_t c) {
-  return (c >> 16);
-}
-uint8_t blue(uint32_t c) {
-  return (c);
-}
