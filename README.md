@@ -17,7 +17,7 @@ This project is based on RGBW LED stripes (I am using SK6812, according to some 
 I am looking for contributors who would be willing to come up with some cool animations, whatever the ESP8266 and the SK6812 can master. It would probably be best, if you build your own test bed. I have a test bed here, with an ESP8266 on a bread board, connected to 5 "steps" (rows) of SK6812 LEDs. In order for it to be small, I used the 144LEDs/m strips to build this.
 
 <table class="image">
-<caption align="bottom">SK6812, 144 LEDs / m, IP67</caption>
+<caption align="bottom">Stair Light test bed</caption>
 <tr>
 <td>
 <img src="https://github.com/ThomasStolt/Stair-Light-Project/blob/master/images/IMG_1958.jpg" height="300"/>
