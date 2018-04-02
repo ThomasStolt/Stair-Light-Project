@@ -86,7 +86,7 @@ void fadeInSingleStep(int step_number, int fade_time_ms, int red, int green, int
   float factor_r = float(red) / 256;
   float factor_g = float(green) / 256;
   float factor_b = float(blue) / 256;
-  float factor_w = float(white) / 512;
+  float factor_w = float(white) / 256;
   step_width = (float) fade_time_ms / 1488;
   i_1 = 0;
   for ( i = 0; i < 256; i = (int) i_1 ) {
@@ -362,7 +362,7 @@ void rainbowSteps(String dir){
   if (dir == "DOWN") { // are we moving down the stairs?
     Serial.println("Moving down the stairs");
     for (j=STEPS;j>=0;j--){
-      fadeInSingleStep(j, 200, red(Wheel(int(((j-1)*255/STEPS)))), green(Wheel(int(((j-1)*255/STEPS)))), blue(Wheel(int(((j-1)*255/STEPS)))),0);
+      fadeInSingleStep(j, 75, red(Wheel(int(((j-1)*255/STEPS)))), green(Wheel(int(((j-1)*255/STEPS)))), blue(Wheel(int(((j-1)*255/STEPS)))),0);
     }
     
     for (k=0;k<2;k++) {
@@ -382,7 +382,7 @@ void rainbowSteps(String dir){
     Serial.println("Moving up the stairs");
 
     for (j=1;j<=STEPS;j++){
-      fadeInSingleStep(j, 200, red(Wheel(int(((j-1)*255/STEPS)))), green(Wheel(int(((j-1)*255/STEPS)))), blue(Wheel(int(((j-1)*255/STEPS)))),0);
+      fadeInSingleStep(j, 75, red(Wheel(int(((j-1)*255/STEPS)))), green(Wheel(int(((j-1)*255/STEPS)))), blue(Wheel(int(((j-1)*255/STEPS)))),0);
     }
         
     for (k=0;k<2;k++) {

@@ -195,8 +195,8 @@ void loop() {
     if ( digitalRead(PIR2) == HIGH ) { dir = "DOWN"; }
     // if one of them has been triggered, choose a random animation function to go to
     if ( dir != "" ) {
-      // switch (random(1,5)) {
-      switch (4) { // for testing purposes
+      switch (random(1,5)) {
+      // switch (4) { // for testing purposes
         case 1:
           simpleFadeToRandom(dir);
           break;
