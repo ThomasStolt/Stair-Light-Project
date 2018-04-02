@@ -45,9 +45,9 @@
 //
 
 #define NEOPIXEL_PIN  14          // Pin D5 == GPIO 14 -> NeoPixels
-#define PIR1_PIN 16               // Pin D0 == GPIO 16 -> PIR Sensor 1
-#define PIR2_PIN 4                // Pin D2 == GPIO 4  -> Pir Sensor 2
-#define STEPS 16                   // how many steps do the stairs have?
+#define PIR1 16                   // Pin D0 == GPIO 16 -> PIR Sensor 1
+#define PIR2 4                    // Pin D2 == GPIO 4  -> Pir Sensor 2
+#define STEPS 16                  // how many steps do the stairs have?
 #define WIDTH 27                  // how many LEDs per step do we have?
 #define NUM_LEDS (STEPS * WIDTH)  // how many LEDs do we have overall?
 #define ANIM_DURATION 20000       // how long is the animation active max? If after this time the second
@@ -91,7 +91,7 @@ volatile int watchdogCount = 0;
 
 void ISRwatchdog() {
   watchdogCount++;
-  if (watchdogCount == 60) {
+  if (watchdogCount == 360) {
     Serial.println();
     Serial.println("the watchdog bites!!!");
     ESP.restart();
@@ -108,7 +108,7 @@ void setup() {
   USE_SERIAL.println();
   USE_SERIAL.println();
 
-  secondTick.attach(1,ISRwatchdog);
+  // secondTick.attach(1,ISRwatchdog);
 
 
   for( uint8_t t = 4; t > 0; t-- ) {
@@ -179,27 +179,24 @@ void setup() {
   // initialise the random generator
   randomSeed(ESP.getCycleCount());
   
-  pinMode(PIR1_PIN, INPUT);
-  pinMode(PIR2_PIN, INPUT);
+  pinMode(PIR1, INPUT);
+  pinMode(PIR2, INPUT);
   
 }
   
 void loop() {
   Serial.println("");
-  
-  int count = 0; // need this for some nicer debug output, so that we can see whether it is still working
-  int val1, val2; // Value for PIR Sensor 1 and 2
-  String dir, trig = "";
-  
+  int count = 0;   // some nicer debug output, is it still working
+  String dir = ""; // to tell, which direction someone is walking the stairs
   while (true) {
     watchdogCount = 0;
-    // figure out, which IR sensor has been triggered first
-    if ( digitalRead(PIR1_PIN) == HIGH ) { dir = "UP"; trig = "yes"; }
-    if ( digitalRead(PIR2_PIN) == HIGH ) { dir = "DOWN"; trig = "yes"; }
-    // if one of them has been triggered, choose a random function to go to
-    if ( trig == "yes" ) {
-      // switch (random(1,4)) {
-      switch (4) {
+    // figure out first, which IR sensor has been triggered
+    if ( digitalRead(PIR1) == HIGH ) { dir = "UP"; }
+    if ( digitalRead(PIR2) == HIGH ) { dir = "DOWN"; }
+    // if one of them has been triggered, choose a random animation function to go to
+    if ( dir != "" ) {
+      // switch (random(1,5)) {
+      switch (4) { // for testing purposes
         case 1:
           simpleFadeToRandom(dir);
           break;
@@ -214,7 +211,7 @@ void loop() {
           break;
       }
     }
-    trig = "";
+    dir = "";
     Serial.print(".");
     if ( count++ > 100 ) {
       Serial.println("");

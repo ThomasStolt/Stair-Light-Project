@@ -1,4 +1,3 @@
-
 // ===================================================================================
 // FUNCTION NAME
 // testPIRs
@@ -9,8 +8,8 @@
 void testPIRs () {
   while (true) {
     int val1, val2;
-    val1 = digitalRead(PIR1_PIN);  // read input value of PIR 1
-    val2 = digitalRead(PIR2_PIN);  // read input value of PIR 2
+    val1 = digitalRead(PIR1);  // read input value of PIR 1
+    val2 = digitalRead(PIR2);  // read input value of PIR 2
     if ( val1 == HIGH ) {
       strip.setPixelColor(0, 0, 200, 0, 50);
     } else if ( val1 == LOW ) {
@@ -26,11 +25,6 @@ void testPIRs () {
     delay(20);
   }
 }
-
-
-// This function fadeInSingleStep will fade a single step number step_number from zero (off)
-// to the values red, green, blue within the allotted time fade_time_ms (in milliseconds)
-// A reverse functionality is provided by the function fadeOutSingleStep
 
 
 // ===================================================================================
@@ -99,6 +93,7 @@ void fadeInSingleStep(int step_number, int fade_time_ms, int red, int green, int
     i_1 = i_1 + 1 / step_width;
     for (j=step_start;j<step_end;j++) {
       strip.setPixelColor(j, gammaw[int(i*factor_r)],gammaw[int(i*factor_g)],gammaw[int(i*factor_b)], gammaw[int(i*factor_w)]);
+      // strip.setPixelColor(j, i, i, i, i);
       yield();
     }
     strip.show();
@@ -162,12 +157,12 @@ void FadeToFullBrightness(String dir){
     for ( i = 1; i <= STEPS; i++ ) {
       fadeInSingleStep(i, 100, 255, 255, 255, 255);
     }
-    val2 = digitalRead(PIR2_PIN);
+    val2 = digitalRead(PIR2);
     c_timer = millis();
     // wait until either time elapsed or second PIR triggered
     while ( ! ( val2 == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
       delay(100);
-      val2 = digitalRead(PIR2_PIN);
+      val2 = digitalRead(PIR2);
       yield();
       if (val2 == HIGH) {
         Serial.println("We have reached the top of the stairs or time is up!");
@@ -186,12 +181,12 @@ void FadeToFullBrightness(String dir){
     for ( i = STEPS; i >= 1; i-- ) {
       fadeInSingleStep(i, 100, 255, 255, 255, 255);
     }
-    val1 = digitalRead(PIR1_PIN);
+    val1 = digitalRead(PIR1);
     c_timer = millis();
     // wait until either time elapsed or second PIR triggered
     while ( ! ( val1 == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
       delay(100);
-      val1 = digitalRead(PIR1_PIN);
+      val1 = digitalRead(PIR1);
       yield();
       if (val1 == HIGH) {
         Serial.println("We have reached the bottom of the stairs or time is up!");
@@ -223,39 +218,41 @@ void starSparkle(String dir){
   int count = 0, i, minStars = 10, maxStars = 20;
   unsigned long s_timer =  millis();
   unsigned long c_timer;
+  int blue = 120;
+  int blue_gamma = gammaw[blue];
   if (dir == "UP") { // We are moving up the stairs
     Serial.println("Moving up the stairs");
-    for ( i = 1; i <= STEPS; i++ ) { fadeInSingleStep(i, 75, 0, 0, 30, 0); }
+    for ( i = 1; i <= STEPS; i++ ) { fadeInSingleStep(i, 75, 0, 0, blue, 0); }
     c_timer = millis();
-    while ( ! ( digitalRead(PIR2_PIN) == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
+    while ( ! ( digitalRead(PIR2) == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
       for ( i = 1; i < random(minStars,maxStars); i++) {
         strip.setPixelColor(random(0,NUM_LEDS), 255, 255, 255, 255);
       }
       strip.show();
-      setAll(0,0,30,0);
+      setAll(0, 0, blue_gamma,0);
       strip.show();
       yield();
-      if ( digitalRead(PIR2_PIN) == HIGH ) { Serial.println("We have reached the top of the stairs!"); }
+      if ( digitalRead(PIR2) == HIGH ) { Serial.println("We have reached the top of the stairs!"); }
       c_timer = millis();
     }
-    for ( i = 1; i <= STEPS ; i++ ) { fadeOutSingleStep(i, 75, 0, 0, 30, 0); }
+    for ( i = 1; i <= STEPS ; i++ ) { fadeOutSingleStep(i, 75, 0, 0, blue, 0); }
     delay(2500);    
   } else if ( dir == "DOWN" ) {    
     Serial.println("Moving down the stairs");
-    for ( i = STEPS; i >= 1; i-- ) { fadeInSingleStep(i, 75, 0, 0, 30, 0); }
+    for ( i = STEPS; i >= 1; i-- ) { fadeInSingleStep(i, 75, 0, 0, blue, 0); }
     c_timer = millis();
-    while ( ! ( digitalRead(PIR1_PIN) == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
+    while ( ! ( digitalRead(PIR1) == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
       for ( i = 1; i < random(minStars,maxStars); i++) {
-        strip.setPixelColor(random(0,NUM_LEDS), 255, 255, 255, 255);
+        strip.setPixelColor(random(0, NUM_LEDS), 255, 255, 255, 255);
       }
       strip.show();
-      setAll(0,0,30,0);
+      setAll(0, 0, blue_gamma, 0);
       strip.show();
       yield();
-      if ( digitalRead(PIR1_PIN) == HIGH) { Serial.println("We have reached the bottom of the stairs!"); }
+      if ( digitalRead(PIR1) == HIGH) { Serial.println("We have reached the bottom of the stairs!"); }
       c_timer = millis();
     }
-    for ( i = STEPS; i >= 1 ; i-- ) { fadeOutSingleStep(i, 75, 0, 0, 30, 0); }
+    for ( i = STEPS; i >= 1 ; i-- ) { fadeOutSingleStep(i, 75, 0, 0, blue, 0); }
     delay(2500);
   }
   yield();
@@ -286,12 +283,12 @@ void simpleFadeToRandom(String dir){
     for ( i = 1; i <= STEPS; i++ ) {
       fadeInSingleStep(i, 100, red, green, blue, white);
     }
-    val2 = digitalRead(PIR2_PIN);
+    val2 = digitalRead(PIR2);
     c_timer = millis();
     // wait until either time elapsed or second PIR triggered
     while ( ! ( val2 == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
       delay(100);
-      val2 = digitalRead(PIR2_PIN);
+      val2 = digitalRead(PIR2);
       yield();
       if (val2 == HIGH) {
         Serial.println("We have reached the top of the stairs or time is up!");
@@ -310,12 +307,12 @@ void simpleFadeToRandom(String dir){
     for ( i = STEPS; i >= 1; i-- ) {
       fadeInSingleStep(i, 100, red, green, blue, white);
     }
-    val1 = digitalRead(PIR1_PIN);
+    val1 = digitalRead(PIR1);
     c_timer = millis();
     // wait until either time elapsed or second PIR triggered
     while ( ! ( val1 == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
       delay(100);
-      val1 = digitalRead(PIR1_PIN);
+      val1 = digitalRead(PIR1);
       yield();
       if (val1 == HIGH) {
         Serial.println("We have reached the bottom of the stairs or time is up!");
@@ -365,7 +362,7 @@ void rainbowSteps(String dir){
   if (dir == "DOWN") { // are we moving down the stairs?
     Serial.println("Moving down the stairs");
     for (j=STEPS;j>=0;j--){
-      fadeInSingleStep(j, 100, red(Wheel(int(((j-1)*255/STEPS)))), green(Wheel(int(((j-1)*255/STEPS)))), blue(Wheel(int(((j-1)*255/STEPS)))),0);
+      fadeInSingleStep(j, 200, red(Wheel(int(((j-1)*255/STEPS)))), green(Wheel(int(((j-1)*255/STEPS)))), blue(Wheel(int(((j-1)*255/STEPS)))),0);
     }
     
     for (k=0;k<2;k++) {
@@ -385,7 +382,7 @@ void rainbowSteps(String dir){
     Serial.println("Moving up the stairs");
 
     for (j=1;j<=STEPS;j++){
-      fadeInSingleStep(j, 100, red(Wheel(int(((j-1)*255/STEPS)))), green(Wheel(int(((j-1)*255/STEPS)))), blue(Wheel(int(((j-1)*255/STEPS)))),0);
+      fadeInSingleStep(j, 200, red(Wheel(int(((j-1)*255/STEPS)))), green(Wheel(int(((j-1)*255/STEPS)))), blue(Wheel(int(((j-1)*255/STEPS)))),0);
     }
         
     for (k=0;k<2;k++) {
