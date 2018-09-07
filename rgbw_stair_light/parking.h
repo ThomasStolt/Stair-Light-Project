@@ -40,6 +40,16 @@ void setAll(int red, int green, int blue, int white){
   }
 }
 
+// ===================================================================================
+// NAME
+// red, green, blue
+// -----------------------------------------------------------------------------------
+// SHORT DESCRIPTION
+// These functions will take a uint32_t input variable (4 bytes), which contain in the
+// first byte the red value, the second byte the green value and in the third byte the
+// blue value. The return value is of type uint8_t (i.e. one byte) and contains the
+// value of the corresponding colour. This is later needed by some other functions.
+// -----------------------------------------------------------------------------------
 uint8_t red(uint32_t c) {
   return (c >> 8);
 }
@@ -50,8 +60,14 @@ uint8_t blue(uint32_t c) {
   return (c);
 }
 
-// Input a value 0 to 255 to get a color value.
-// The colours are a transition r - g - b - back to r.
+// ===================================================================================
+// NAME
+// Wheel
+// -----------------------------------------------------------------------------------
+// This function takes as input a value from 0 to 255 and returns a uint32_t with a 
+// color value for a neopixel. Just like a colour wheel. When counted upwards, the 
+// colours are a transitioned from red to green to blue and back to red.
+
 uint32_t Wheel(byte WheelPos) {
   WheelPos = 255 - WheelPos;
   if(WheelPos < 85) {
@@ -400,13 +416,12 @@ void rainbowSteps(String dir){
   }
 }
 
-
 // ===================================================================================
 // NAME
 // setStepRndm
 // -----------------------------------------------------------------------------------
 // SHORT DESCRIPTION
-// Sets all pixels to a random colour - ONLY ON BIRTHDAYS!!!
+// Sets all pixels of a given step to a random colour - ONLY ON BIRTHDAYS!!!
 // -----------------------------------------------------------------------------------
 void setStepRndm(int s, int c){
   int step_start = (s - 1) * WIDTH;
@@ -416,10 +431,40 @@ void setStepRndm(int s, int c){
     strip.setPixelColor(i, c);
     yield();
   }
+  // strip.show();
+}
+
+// ===================================================================================
+// NAME
+// birthday
+// -----------------------------------------------------------------------------------
+// SHORT DESCRIPTION
+// Sets all pixels to a random colour - ONLY ON BIRTHDAYS!!!
+// -----------------------------------------------------------------------------------
+void birthday(String dir) {
+  unsigned long s_timer = millis();
+  unsigned long c_timer = millis();
+  int s;
+  while ( c_timer - s_timer < ANIM_DURATION ) {
+  // while ( c_timer - s_timer < 15000 ) {
+    for (s=1;s<=STEPS;s++) {
+      setStepRndm(s, 1);
+      c_timer = millis();
+    }
+    strip.show();
+  }
+  setAll(0,0,0,0);
   strip.show();
 }
 
-
+// ===================================================================================
+// NAME
+// fadeStep
+// -----------------------------------------------------------------------------------
+// SHORT DESCRIPTION
+// This function fades all steps, each step separately, of the stairs to a given
+// colour.
+// -----------------------------------------------------------------------------------
 void fadeStep(int red, int green, int blue, int white){
   // This function fades each step after the other to the
   // colour (red,green,blue,white)
@@ -443,7 +488,14 @@ void fadeStep(int red, int green, int blue, int white){
   }
 }
 
-// Fill the dots one after the other with a color
+
+// ===================================================================================
+// NAME
+// colorWipe
+// -----------------------------------------------------------------------------------
+// SHORT DESCRIPTION
+// This function fills all dots of the strip one after the other with a given color
+// -----------------------------------------------------------------------------------
 void colorWipe(uint32_t c, uint8_t wait) {
   for(uint16_t i=0; i<strip.numPixels(); i++) {
     strip.setPixelColor(i, c);

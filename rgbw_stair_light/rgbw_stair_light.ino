@@ -4,12 +4,11 @@
 // This project is using NeoPixels to illuminate individual steps of a flight of stairs
 // automatically, while someone is walking up (or down) the stairs. The project is based  
 // on an ESP8266 as microcontroller, strips of SK2812 as LEDs (should be compatible to
-// WS2812) and two SR501 as motion
-// sensor. An ESP8266 is used as the microcontroller.
-// I have written this sketch so that you should be easily able to adapt it to your
-// own needs. You can e.g. adapt the number of steps of your stairs (STEPS) as well as
+// WS2812) and two SR501 as motion sensors. An ESP8266 is used as the microcontroller.
+// I have tried to make it easy to adapt this sketch to your own needs.
+// You can e.g. change the number of steps of your stairs (STEPS) as well as
 // the 'width' of your stairs, in terms of how many LEDs are you using per step (WIDTH).
-// I have written a few animations, most of this code is based on the strandtest code
+// I have written a few animations, much of this code is based on the strandtest code
 // example from adafruit, with some adaptations however.
 //
 // This is pretty much work in progress.
@@ -33,6 +32,8 @@
 #include <ESP8266WiFiMulti.h>
 #include <ESP8266HTTPClient.h>
 #include <ESP8266httpUpdate.h>
+#include <EasyNTPClient.h>
+#include <WiFiUdp.h>
 #include <credentials.h>
 #include <Ticker.h>
 
@@ -41,7 +42,7 @@
 #endif
 
 // Pin Assignment: it turns out that GPIO 15 and 2 influence the boot mode
-// of the ESP8266, should not be used
+// of the ESP8266, so they should not be used ever.
 //
 
 #define NEOPIXEL_PIN  14          // Pin D5 == GPIO 14 -> NeoPixels
@@ -86,6 +87,9 @@ int gammaw[] = {
 
 #include "parking.h"
 
+WiFiUDP udp;
+EasyNTPClient ntpClient(udp, "pool.ntp.org", ((0*60*60)+(0*60))); // CET = GMT + 1:00
+
 Ticker secondTick;
 volatile int watchdogCount = 0;
 
@@ -118,16 +122,22 @@ void setup() {
   }
 
   // ========================================================================================
-  // Setting up WiFi. I am using mySSID and myPass here. They come from credentials.h located
-  // in ~/.arduino15/packages/esp8266/hardware/esp82766/2.4.1/libaries/credentials
-  // and needs to be created by you! This is only here to hide my own credentials from Github
+  // Setting up WiFi. I am using mySSID and myPass here. On my system, they are defined in a
+  // header file named credentials.h (see include statemend above), which I have located at:
+  // ~/.arduino15/packages/esp8266/hardware/esp82766/2.4.1/libaries/credentials/
+  // It contains only two lines:
+  // char mySSID[] = "ssid";
+  // char myPass[] = "pass";
+  // This is only here to hide my own credentials from Github. You can also just put your own
+  // credentials directly into the WifFi.begin function.
   // ========================================================================================
-  WiFi.begin(mySSID, myPass);
+  // WiFi.begin(mySSID, myPass);
+  WiFi.begin("TomiPhone7", "Benjamin_04");
   Serial.print("Connecting");
   while (WiFi.status() != WL_CONNECTED)
   {
-    delay(500);
-    Serial.print(".");
+    delay(1000);
+    Serial.print(".:");
   }
   Serial.println();
   Serial.print("Connected, IP address: ");
@@ -147,14 +157,14 @@ void setup() {
   
   // =======================================================================================
   // Don't even touch this, it took me weeks to get this working. I am not sure why, but it
-  // does work now
+  // does work now.
   // Getting updates OTA
   // I am thinking of making this a function and calling it at first boot (e.g. if the reset
   // button is pressed) or through an MQTT message from a broker. But it is not that urgent.
   // =======================================================================================
   if((WiFi.status() == WL_CONNECTED)) {
-    t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/iotappstoryv20.php");
-    // t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/bin/rgbw_stair_light");
+    // t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/iotappstoryv20.php");
+    t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/bin/rgbw_stair_light");
       switch(ret) {
         case HTTP_UPDATE_FAILED:
           USE_SERIAL.printf("HTTP_UPDATE_FAILD Error (%d): %s", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
@@ -188,6 +198,7 @@ void loop() {
   Serial.println("");
   int count = 0;   // some nicer debug output, is it still working
   String dir = ""; // to tell, which direction someone is walking the stairs
+  int currenttime;
   while (true) {
     watchdogCount = 0;
     // figure out first, which IR sensor has been triggered
@@ -195,26 +206,35 @@ void loop() {
     if ( digitalRead(PIR2) == HIGH ) { dir = "DOWN"; }
     // if one of them has been triggered, choose a random animation function to go to
     if ( dir != "" ) {
-      switch (random(1,5)) {
-      // switch (4) { // for testing purposes
-        case 1:
-          simpleFadeToRandom(dir);
-          break;
-        case 2:
-          rainbowSteps(dir);
-          break;
-        case 3:
-          FadeToFullBrightness(dir);
-          break;
-        case 4:
-          starSparkle(dir);
-          break;
+      if ( currenttime > 1531778400 && currenttime < 1531864799 ) {
+        birthday(dir);
+      } else {
+        switch (random(1,5)) {
+        // switch (5) { // for testing purposes
+          case 1:
+            simpleFadeToRandom(dir);
+            break;
+          case 2:
+            rainbowSteps(dir);
+            break;
+          case 3:
+            FadeToFullBrightness(dir);
+            break;
+          case 4:
+            starSparkle(dir);
+            break;
+        }
       }
     }
     dir = "";
     Serial.print(".");
+    // Serial.println(currenttime);
     if ( count++ > 100 ) {
       Serial.println("");
+      
+      currenttime = ntpClient.getUnixTime();
+      
+      Serial.println(currenttime);
       count = 0;
     }
     yield();
