@@ -34,7 +34,7 @@
 #include <ESP8266httpUpdate.h>
 #include <EasyNTPClient.h>
 #include <WiFiUdp.h>
-#include <credentials.h>
+// #include <credentials.h>
 #include <Ticker.h>
 
 #ifdef __AVR__
@@ -124,15 +124,15 @@ void setup() {
   // ========================================================================================
   // Setting up WiFi. I am using mySSID and myPass here. On my system, they are defined in a
   // header file named credentials.h (see include statemend above), which I have located at:
-  // ~/.arduino15/packages/esp8266/hardware/esp82766/2.4.1/libaries/credentials/
+  // ~/.arduino15/packages/esp8266/hardware/esp8266/2.4.1/libaries/credentials/
   // It contains only two lines:
   // char mySSID[] = "ssid";
   // char myPass[] = "pass";
   // This is only here to hide my own credentials from Github. You can also just put your own
-  // credentials directly into the WifFi.begin function.
+  // credentials directly into the WifFi.begin("YourWiFi","YourWiFiPass") function.
   // ========================================================================================
   // WiFi.begin(mySSID, myPass);
-  WiFi.begin("TomiPhone7", "Benjamin_04");
+  WiFi.begin("linksys-n", "Nadine21");
   Serial.print("Connecting");
   while (WiFi.status() != WL_CONNECTED)
   {
@@ -206,7 +206,10 @@ void loop() {
     if ( digitalRead(PIR2) == HIGH ) { dir = "DOWN"; }
     // if one of them has been triggered, choose a random animation function to go to
     if ( dir != "" ) {
-      if ( currenttime > 1531778400 && currenttime < 1531864799 ) {
+      // J's Birthday
+      // if ( currenttime > 1531778400 && currenttime < 1531864799 ) {
+      // M's Birthday
+      if ( currenttime > 1537903800 && currenttime < 1537999199 ) {
         birthday(dir);
       } else {
         switch (random(1,5)) {

@@ -426,8 +426,13 @@ void rainbowSteps(String dir){
 void setStepRndm(int s, int c){
   int step_start = (s - 1) * WIDTH;
   int step_end = step_start + WIDTH;
+  int r, g, b, w;
   for(int i=step_start;i<step_end;i++){
-    c = random(16711680);
+    r = random(200);
+    g = random(200);
+    b = random(200);
+    w = 0;
+    c = Wheel(random(255));
     strip.setPixelColor(i, c);
     yield();
   }
@@ -564,7 +569,6 @@ void rainbowFade2White(uint8_t wait, int rainbowLoops, int whiteLoops) {
       for(int i=0; i< strip.numPixels(); i++) {
 
         wheelVal = Wheel(((i * 256 / strip.numPixels()) + j) & 255);
-
         redVal = red(wheelVal) * float(fadeVal/fadeMax);
         greenVal = green(wheelVal) * float(fadeVal/fadeMax);
         blueVal = blue(wheelVal) * float(fadeVal/fadeMax);
