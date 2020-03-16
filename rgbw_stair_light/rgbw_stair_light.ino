@@ -132,7 +132,7 @@ void setup() {
   // credentials directly into the WifFi.begin("YourWiFi","YourWiFiPass") function.
   // ========================================================================================
   // WiFi.begin(mySSID, myPass);
-  WiFi.begin("linksys-n", "Nadine21");
+  WiFi.begin("", "");
   Serial.print("Connecting");
   while (WiFi.status() != WL_CONNECTED)
   {
