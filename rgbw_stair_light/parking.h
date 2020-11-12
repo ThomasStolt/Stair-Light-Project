@@ -180,9 +180,9 @@ void FadeToFullBrightness(String dir){
       delay(100);
       val2 = digitalRead(PIR2);
       yield();
-      if (val2 == HIGH) {
-        Serial.println("We have reached the top of the stairs or time is up!");
-      }
+      //if (val2 == HIGH) {
+        //Serial.println("We have reached the top of the stairs or time is up!");
+      //}
       c_timer = millis();
     }
     // end animation
@@ -204,9 +204,9 @@ void FadeToFullBrightness(String dir){
       delay(100);
       val1 = digitalRead(PIR1);
       yield();
-      if (val1 == HIGH) {
-        Serial.println("We have reached the bottom of the stairs or time is up!");
-      }
+      //if (val1 == HIGH) {
+        //Serial.println("We have reached the bottom of the stairs or time is up!");
+      //}
       c_timer = millis();
     }
     // end animation
@@ -306,9 +306,9 @@ void simpleFadeToRandom(String dir){
       delay(100);
       val2 = digitalRead(PIR2);
       yield();
-      if (val2 == HIGH) {
-        Serial.println("We have reached the top of the stairs or time is up!");
-      }
+      //if (val2 == HIGH) {
+        //Serial.println("We have reached the top of the stairs or time is up!");
+      //}
       c_timer = millis();
     }
     // end animation
@@ -330,9 +330,9 @@ void simpleFadeToRandom(String dir){
       delay(100);
       val1 = digitalRead(PIR1);
       yield();
-      if (val1 == HIGH) {
-        Serial.println("We have reached the bottom of the stairs or time is up!");
-      }
+      //if (val1 == HIGH) {
+      //  Serial.println("We have reached the bottom of the stairs or time is up!");
+      //}
       c_timer = millis();
     }
     // end animation
