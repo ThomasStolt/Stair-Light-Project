@@ -248,7 +248,7 @@ void starSparkle(String dir){
       setAll(0, 0, blue_gamma,0);
       strip.show();
       yield();
-      if ( digitalRead(PIR2) == HIGH ) { Serial.println("We have reached the top of the stairs!"); }
+      //if ( digitalRead(PIR2) == HIGH ) { Serial.println("We have reached the top of the stairs!"); }
       c_timer = millis();
     }
     for ( i = 1; i <= STEPS ; i++ ) { fadeOutSingleStep(i, 75, 0, 0, blue, 0); }
@@ -265,7 +265,7 @@ void starSparkle(String dir){
       setAll(0, 0, blue_gamma, 0);
       strip.show();
       yield();
-      if ( digitalRead(PIR1) == HIGH) { Serial.println("We have reached the bottom of the stairs!"); }
+      //if ( digitalRead(PIR1) == HIGH) { Serial.println("We have reached the bottom of the stairs!"); }
       c_timer = millis();
     }
     for ( i = STEPS; i >= 1 ; i-- ) { fadeOutSingleStep(i, 75, 0, 0, blue, 0); }
