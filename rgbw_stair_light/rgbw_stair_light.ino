@@ -21,7 +21,7 @@
 // animation of 7 seconds. You will have to play around to fit your needs.
 //
 //
-// last update 30.03.2018
+// last update 31.11.2021
 //
 
 #include <Arduino.h>
@@ -34,7 +34,7 @@
 #include <ESP8266httpUpdate.h>
 #include <EasyNTPClient.h>
 #include <WiFiUdp.h>
-// #include <credentials.h>
+#include <credentials.h>
 #include <Ticker.h>
 
 #ifdef __AVR__
@@ -209,9 +209,13 @@ void loop() {
       // J's Birthday
       // if ( currenttime > 1531778400 && currenttime < 1531864799 ) {
       // M's Birthday
-      if ( currenttime > 1537903800 && currenttime < 1537999199 ) {
-        birthday(dir);
-      } else {
+      //if ( currenttime > 1537903800 && currenttime < 1537999199 ) {
+      //  birthday(dir);} 
+
+      //When its between 22:00 and 06:00 I want the lights to only be Blue
+      if ( hour() > 22 && hour() < 6 ) { 
+        blue(dir);}
+      else {
         switch (random(1,5)) {
         // switch (5) { // for testing purposes
           case 1:

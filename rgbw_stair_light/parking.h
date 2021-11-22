@@ -548,12 +548,19 @@ void pulseWhite(uint8_t wait) {
         strip.show();
       }
 }
+// ===================================================================================
+// NAME
+// Blue
+// -----------------------------------------------------------------------------------
+// SHORT DESCRIPTION
+// Makes all Steps Blue
+// -----------------------------------------------------------------------------------
 
-
-
-
-
-
+void Blue(int blue){
+  for(int i=0;i<NUM_LEDS;i++){
+    strip.setPixelColor(i, strip.Color(blue));
+  }
+}
 
 
 void rainbowFade2White(uint8_t wait, int rainbowLoops, int whiteLoops) {
