@@ -1,11 +1,12 @@
 #include <Adafruit_NeoPixel.h>
+
 #ifdef __AVR__
   #include <avr/power.h>
 #endif
 
 #define PIN 14
 
-#define NUM_LEDS 432
+#define NUM_LEDS 378
 
 #define BRIGHTNESS 250
 
@@ -45,17 +46,17 @@ void loop() {
   // Some example procedures showing how to display to the pixels:
   // colorWipe(strip.Color(255, 0, 0), 1); // Red
   // colorWipe(strip.Color(0, 255, 0), 1); // Green
-  // colorWipe(strip.Color(0, 0, 255), 1); // Blue
-  // colorWipe(strip.Color(0, 0, 0, 255), 1); // White
+  colorWipe(strip.Color(0, 0, 179), 1);   // Blue
+  colorWipe(strip.Color(0, 0, 0, 80), 1); // White
 
-  whiteOverRainbow(20,15,5);  
+  // whiteOverRainbow(20,15,5);  
 
-  pulseWhite(5); 
+  // pulseWhite(5); 
 
   // fullWhite();
   // delay(2000);
 
-  rainbowFade2White(3,3,1);
+  // rainbowFade2White(3,3,1);
 
 
 }
