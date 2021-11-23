@@ -34,8 +34,9 @@
 #include <ESP8266httpUpdate.h>
 #include <EasyNTPClient.h>
 #include <WiFiUdp.h>
-#include <credentials.h>
+//#include <credentials.h>
 #include <Ticker.h>
+
 
 #ifdef __AVR__
   #include <avr/power.h>
@@ -132,16 +133,16 @@ void setup() {
   // credentials directly into the WifFi.begin("YourWiFi","YourWiFiPass") function.
   // ========================================================================================
   // WiFi.begin(mySSID, myPass);
-  WiFi.begin("", "");
-  Serial.print("Connecting");
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    delay(1000);
-    Serial.print(".:");
-  }
-  Serial.println();
-  Serial.print("Connected, IP address: ");
-  Serial.println(WiFi.localIP());
+  // WiFi.begin("", "");
+  // Serial.print("Connecting");
+  // while (WiFi.status() != WL_CONNECTED)
+  // {
+  //   delay(1000);
+  //   Serial.print(".:");
+  // }
+  // Serial.println();
+  // Serial.print("Connected, IP address: ");
+  // Serial.println(WiFi.localIP());
   // print MAC address, uncomment if needed
   // byte mac[6];
   // WiFi.macAddress(mac);
@@ -162,21 +163,21 @@ void setup() {
   // I am thinking of making this a function and calling it at first boot (e.g. if the reset
   // button is pressed) or through an MQTT message from a broker. But it is not that urgent.
   // =======================================================================================
-  if((WiFi.status() == WL_CONNECTED)) {
-    // t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/iotappstoryv20.php");
-    t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/bin/rgbw_stair_light");
-      switch(ret) {
-        case HTTP_UPDATE_FAILED:
-          USE_SERIAL.printf("HTTP_UPDATE_FAILD Error (%d): %s", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
-        break;
-        case HTTP_UPDATE_NO_UPDATES:
-          USE_SERIAL.println("HTTP_UPDATE_NO_UPDATES");
-        break;
-        case HTTP_UPDATE_OK:
-          USE_SERIAL.println("HTTP_UPDATE_OK");
-        break;
-      }
-    }
+  // if((WiFi.status() == WL_CONNECTED)) {
+  //   // t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/iotappstoryv20.php");
+  //   t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/bin/rgbw_stair_light");
+  //     switch(ret) {
+  //       case HTTP_UPDATE_FAILED:
+  //         USE_SERIAL.printf("HTTP_UPDATE_FAILD Error (%d): %s", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
+  //       break;
+  //       case HTTP_UPDATE_NO_UPDATES:
+  //         USE_SERIAL.println("HTTP_UPDATE_NO_UPDATES");
+  //       break;
+  //       case HTTP_UPDATE_OK:
+  //         USE_SERIAL.println("HTTP_UPDATE_OK");
+  //       break;
+  //     }
+  //   }
   // =======================================================================================
   // =======================================================================================
   // =======================================================================================
@@ -214,10 +215,10 @@ void loop() {
       //  birthday(dir);} 
 
       //When its between 22:00 and 06:00 I want the lights to only be Blue
-      if ( hour() > 22 && hour() < 6 ) { 
-        blue(dir);}
-      else {
-        switch (random(1,5)) {
+      // if ( hour() > 22 && hour() < 6 ) { 
+      //   blue(dir);}
+      // else {
+      //   switch (random(1,5)) {
   // for testing purposes
         // switch (5) { 
           case 1:
