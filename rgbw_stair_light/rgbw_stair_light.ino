@@ -7,7 +7,7 @@
 // WS2812) and two SR501 as motion sensors. An ESP8266 is used as the microcontroller.
 // I have tried to make it easy to adapt this sketch to your own needs.
 // You can e.g. change the number of steps of your stairs (STEPS) as well as
-// the 'width' of your stairs, in terms of how many LEDs are you using per step (WIDTH).
+// the 'width' of your stairs, in terms of how many LEDs you are using per step (WIDTH).
 // I have written a few animations, much of this code is based on the strandtest code
 // example from adafruit, with some adaptations however.
 //
@@ -21,28 +21,29 @@
 // animation of 7 seconds. You will have to play around to fit your needs.
 //
 //
-// last update 30.03.2018
+// last update 31.11.2021
 //
 
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
 #include <time.h>
 #include <ESP8266WiFi.h>
-#include <WiFiClient.h>  // do we need this?
+//#include <WiFiClient.h> do we need this?  No we don’t!
 #include <ESP8266WiFiMulti.h>
 #include <ESP8266HTTPClient.h>
 #include <ESP8266httpUpdate.h>
 #include <EasyNTPClient.h>
 #include <WiFiUdp.h>
-// #include <credentials.h>
+//#include <credentials.h>
 #include <Ticker.h>
+
 
 #ifdef __AVR__
   #include <avr/power.h>
 #endif
 
 // Pin Assignment: it turns out that GPIO 15 and 2 influence the boot mode
-// of the ESP8266, so they should not be used ever.
+// of the ESP8266, so they should not be used, ever.
 //
 
 #define NEOPIXEL_PIN  14          // Pin D5 == GPIO 14 -> NeoPixels
@@ -51,8 +52,7 @@
 #define STEPS 16                  // how many steps do the stairs have?
 #define WIDTH 27                  // how many LEDs per step do we have?
 #define NUM_LEDS (STEPS * WIDTH)  // how many LEDs do we have overall?
-#define ANIM_DURATION 20000       // how long is the animation active max? If after this time the second
-                                  // IR sensor is not triggered, we call the end of the animation
+#define ANIM_DURATION 20000       // how long is the animation active max? If after this time the second IR sensor is not triggered, we call the end of the animation
 // if BRIGHNESS is too small (around 10 or less), the animation appears 'skippy', i.e. not smooth
 // that is because there are only a few (10) levels of brighness for each color, so this is normal
 #define BRIGHTNESS 255            // limit brightness of the strip
@@ -98,6 +98,7 @@ void ISRwatchdog() {
   if (watchdogCount == 360) {
     Serial.println();
     Serial.println("the watchdog bites!!!");
+    Serial.println("restarting now");
     ESP.restart();
   }
 
@@ -132,16 +133,16 @@ void setup() {
   // credentials directly into the WifFi.begin("YourWiFi","YourWiFiPass") function.
   // ========================================================================================
   // WiFi.begin(mySSID, myPass);
-  WiFi.begin("", "");
-  Serial.print("Connecting");
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    delay(1000);
-    Serial.print(".:");
-  }
-  Serial.println();
-  Serial.print("Connected, IP address: ");
-  Serial.println(WiFi.localIP());
+  // WiFi.begin("", "");
+  // Serial.print("Connecting");
+  // while (WiFi.status() != WL_CONNECTED)
+  // {
+  //   delay(1000);
+  //   Serial.print(".:");
+  // }
+  // Serial.println();
+  // Serial.print("Connected, IP address: ");
+  // Serial.println(WiFi.localIP());
   // print MAC address, uncomment if needed
   // byte mac[6];
   // WiFi.macAddress(mac);
@@ -162,27 +163,28 @@ void setup() {
   // I am thinking of making this a function and calling it at first boot (e.g. if the reset
   // button is pressed) or through an MQTT message from a broker. But it is not that urgent.
   // =======================================================================================
-  if((WiFi.status() == WL_CONNECTED)) {
-    // t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/iotappstoryv20.php");
-    t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/bin/rgbw_stair_light");
-      switch(ret) {
-        case HTTP_UPDATE_FAILED:
-          USE_SERIAL.printf("HTTP_UPDATE_FAILD Error (%d): %s", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
-        break;
-        case HTTP_UPDATE_NO_UPDATES:
-          USE_SERIAL.println("HTTP_UPDATE_NO_UPDATES");
-        break;
-        case HTTP_UPDATE_OK:
-          USE_SERIAL.println("HTTP_UPDATE_OK");
-        break;
-      }
-    }
+  // if((WiFi.status() == WL_CONNECTED)) {
+  //   // t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/iotappstoryv20.php");
+  //   t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/bin/rgbw_stair_light");
+  //     switch(ret) {
+  //       case HTTP_UPDATE_FAILED:
+  //         USE_SERIAL.printf("HTTP_UPDATE_FAILD Error (%d): %s", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
+  //       break;
+  //       case HTTP_UPDATE_NO_UPDATES:
+  //         USE_SERIAL.println("HTTP_UPDATE_NO_UPDATES");
+  //       break;
+  //       case HTTP_UPDATE_OK:
+  //         USE_SERIAL.println("HTTP_UPDATE_OK");
+  //       break;
+  //     }
+  //   }
   // =======================================================================================
   // =======================================================================================
   // =======================================================================================
   
   strip.setBrightness(BRIGHTNESS);
   strip.begin(); // prepare the data pin for NeoPixel output
+  Serial.println("All pixels should now be off");
   setAll(0,0,0,0);
   strip.show(); // Initialize all pixels to 'off'
 
@@ -196,7 +198,7 @@ void setup() {
   
 void loop() {
   Serial.println("");
-  int count = 0;   // some nicer debug output, is it still working
+  int count = 0;   // some nicer debug output, to tell if it's still working
   String dir = ""; // to tell, which direction someone is walking the stairs
   int currenttime;
   while (true) {
@@ -209,11 +211,16 @@ void loop() {
       // J's Birthday
       // if ( currenttime > 1531778400 && currenttime < 1531864799 ) {
       // M's Birthday
-      if ( currenttime > 1537903800 && currenttime < 1537999199 ) {
-        birthday(dir);
-      } else {
-        switch (random(1,5)) {
-        // switch (5) { // for testing purposes
+      //if ( currenttime > 1537903800 && currenttime < 1537999199 ) {
+      //  birthday(dir);} 
+
+      //When its between 22:00 and 06:00 I want the lights to only be Blue
+      // if ( hour() > 22 && hour() < 6 ) { 
+      //   blue(dir);}
+      // else {
+      //   switch (random(1,5)) {
+  // for testing purposes
+        // switch (5) { 
           case 1:
             simpleFadeToRandom(dir);
             break;
@@ -244,4 +251,8 @@ void loop() {
     delay(100);
   }
 }
+
+
+
+iuh
 
