@@ -1,11 +1,11 @@
 // =============================================================================
-// Geburtstage – nur Animation "birthday" an diesen Tagen
+// Birthdays – only "birthday" animation on these days
 // =============================================================================
-// Anleitung:
-// 1. Diese Datei kopieren nach:  birthdays.h
-// 2. birthdays.h ist in .gitignore und wird nicht auf GitHub committed.
-// 3. Unten BIRTHDAY_COUNT anpassen und Einträge (Monat, Tag) ergänzen.
-//    Monat 1–12, Tag 1–31. Format: BIRTHDAY(Monat, Tag)
+// Instructions:
+// 1. Copy this file to:  birthdays.h
+// 2. birthdays.h is in .gitignore and will not be committed to GitHub.
+// 3. Set BIRTHDAY_COUNT below and add entries (month, day).
+//    Month 1–12, day 1–31. Format: BIRTHDAY(month, day)
 // =============================================================================
 
 #ifndef BIRTHDAYS_H
@@ -15,10 +15,10 @@
 
 #define BIRTHDAY(month, day)  { (month), (day) }
 
-// Liste: (Monat, Tag) – z.B. 15. März und 24. Dezember
+// List: (month, day) – e.g. 15 March and 24 December
 static const uint8_t BIRTHDAYS[BIRTHDAY_COUNT][2] = {
-  BIRTHDAY(3, 15),   // 15. März
-  BIRTHDAY(12, 24),  // 24. Dezember
+  BIRTHDAY(3, 15),   // 15 March
+  BIRTHDAY(12, 24),  // 24 December
 };
 
 #endif /* BIRTHDAYS_H */

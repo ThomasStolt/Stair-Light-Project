@@ -1,9 +1,9 @@
-// Minimaler OTA-Test: nur WiFi + ArduinoOTA, keine LEDs/PIR/NTP.
-// Wenn OTA mit diesem Sketch funktioniert, liegt das Problem am vollen Stair-Light-Sketch (Speicher/Last).
+// Minimal OTA test: WiFi + ArduinoOTA only, no LEDs/PIR/NTP.
+// If OTA works with this sketch, the issue is with the full Stair Light sketch (memory/load).
 //
-// 1. credentials.h aus rgbw_stair_light/ hierher kopieren (oder Verknüpfung anlegen).
-// 2. Per USB flashen: ./upload-minimal-via-usb.sh
-// 3. OTA testen: ./upload-minimal-ota.sh stairlight-testbed.local --debug
+// 1. Copy credentials.h from rgbw_stair_light/ here (or create a link).
+// 2. Flash via USB: ./upload-minimal-via-usb.sh
+// 3. Test OTA: ./upload-minimal-ota.sh stairlight-testbed.local --debug
 
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
@@ -25,7 +25,7 @@ void setup() {
   }
   Serial.println();
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("Kein WiFi. Halt.");
+    Serial.println("No WiFi. Stopping.");
     return;
   }
   Serial.print("IP: ");
@@ -33,17 +33,17 @@ void setup() {
 
   ArduinoOTA.setHostname(OTA_HOSTNAME);
   ArduinoOTA.onStart([]() {
-    Serial.printf("OTA Start – Heap: %u\n", ESP.getFreeHeap());
+    Serial.printf("OTA start – heap: %u\n", ESP.getFreeHeap());
   });
   ArduinoOTA.onEnd([]() {
-    Serial.println("OTA Ende – Neustart in 2 s");
+    Serial.println("OTA end – restart in 2 s");
     delay(2000);
   });
   ArduinoOTA.onError([](ota_error_t e) {
-    Serial.printf("OTA Fehler %u\n", e);
+    Serial.printf("OTA error %u\n", e);
   });
   ArduinoOTA.begin();
-  Serial.println("OTA bereit. Warte auf Upload...");
+  Serial.println("OTA ready. Waiting for upload...");
 }
 
 void loop() {

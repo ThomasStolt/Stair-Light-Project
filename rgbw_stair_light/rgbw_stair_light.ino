@@ -54,23 +54,23 @@
 #define STEPS 16                  // how many steps do the stairs have?
 #define WIDTH 27                  // how many LEDs per step do we have?
 #define NUM_LEDS (STEPS * WIDTH)  // how many LEDs do we have overall?
-#define ANIM_DURATION 20000       // Dauer jeder Animation (ms), danach Fade-Out
-#define POST_ANIM_DELAY_MS 10000  // Pause nach Animation, bis wieder auf Bewegung gewartet wird
-#define TIMEZONE_OFFSET_SEC (1*3600)  // CET = UTC+1; für MEZ 3600, für MESZ 7200
+#define ANIM_DURATION 20000       // Duration of each animation (ms), then fade-out
+#define POST_ANIM_DELAY_MS 10000  // Delay after animation before next motion trigger (ms)
+#define TIMEZONE_OFFSET_SEC (1*3600)  // CET = UTC+1; 3600 for CET, 7200 for CEST
 // if BRIGHNESS is too small (around 10 or less), the animation appears 'skippy', i.e. not smooth
 // that is because there are only a few (10) levels of brighness for each color, so this is normal
 #define BRIGHTNESS 255            // limit brightness of the strip
 #define USE_SERIAL Serial
-#define DEBUG 1   // 1 = Serieller Monitor zeigt PIR-Zustand und Trigger
+#define DEBUG 1   // 1 = Serial monitor shows PIR state and trigger
 
 ESP8266WiFiMulti WiFiMulti;
 ESP8266WebServer server(80);
 
-// Web-Steuerung: Treppenautomatik und manuelle Farbe (0–100 % pro Kanal)
-bool automationOn = false;  // Start: Automatik aus (per Web wieder anstellbar)
+// Web control: stair automation and manual colour (0–100% per channel)
+bool automationOn = false;  // Start: automation off (can be turned on via web)
 uint8_t manual_r = 0, manual_g = 0, manual_b = 0, manual_w = 0;  // 0–100 %
 
-// Wenn > 0: Animationen (z. B. per Web „Go“) laufen nur so lange (ms), sonst ANIM_DURATION
+// If > 0: animations (e.g. web "Go") run only for this duration (ms), else ANIM_DURATION
 uint32_t g_animDurationOverrideMs = 0;
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRBW + NEO_KHZ800);
@@ -95,7 +95,7 @@ int gammaw[] = {
   177,180,182,184,186,189,191,193,196,198,200,203,205,208,210,213,
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
-// Wird in Animationen und Warteschleifen aufgerufen, damit OTA und Web-Server auch während Animation reagieren
+// Called in animations and wait loops so OTA and web server stay responsive during animation
 void handleNetwork(void);
 
 #include "parking.h"
@@ -121,8 +121,8 @@ void ISRwatchdog() {
 
 }
 
-// Manuelle Farbe (R,G,B,W 0–100 %) auf den Strip anwenden (mit Gamma).
-// 1–100 % werden auf Gamma-Index 25–255 abgebildet, damit schon 10 % sichtbar sind.
+// Apply manual colour (R,G,B,W 0–100%) to strip (with gamma).
+// 1–100% mapped to gamma index 25–255 so 10% is already visible.
 static uint8_t manualPctToGamma(uint8_t pct) {
   if (pct == 0) return 0;
   int idx = 25 + (int)((unsigned long)pct * 230 / 100);
@@ -152,27 +152,27 @@ void handleIndex() {
     ".alloff{background:#a00;color:#fff;margin-top:1rem;} .auto{background:#2a4a2a;color:#9f9;} .auto.off{background:#4a2a2a;color:#f99;}"
     "span.pct{display:inline-block;min-width:2.2em;text-align:left;} .led{width:14px;height:14px;border-radius:50%;display:inline-block;margin-right:0.35rem;box-shadow:0 0 6px currentColor;}"
     ".led-r{background:#e00;} .led-g{background:#0a0;} .led-b{background:#06f;} .led-w{background:#eee;}"
-    "</style></head><body><main><h1>Treppenlicht</h1>"
-    "<p style=margin-bottom:1rem;><b>Treppenautomatik</b><br>"
-    "<button type=button class=\"btn auto\" id=autoOn>An</button> <button type=button class=\"btn auto off\" id=autoOff>Aus</button> &rarr; <b id=autoStatus>–</b></p>"
+    "</style></head><body><main><h1>Stair Light</h1>"
+    "<p style=margin-bottom:1rem;><b>Stair automation</b><br>"
+    "<button type=button class=\"btn auto\" id=autoOn>On</button> <button type=button class=\"btn auto off\" id=autoOff>Off</button> &rarr; <b id=autoStatus>–</b></p>"
     "<div class=row><span class=\"led led-r\"></span><button type=button class=\"btn minus\" data-c=r data-a=minus>−10%</button>"
-    "<button type=button class=\"btn onoff\" id=togR>Aus</button><button type=button class=\"btn plus\" data-c=r data-a=plus>+10%</button><span id=pctR class=pct>0%</span></div>"
+    "<button type=button class=\"btn onoff\" id=togR>Off</button><button type=button class=\"btn plus\" data-c=r data-a=plus>+10%</button><span id=pctR class=pct>0%</span></div>"
     "<div class=row><span class=\"led led-g\"></span><button type=button class=\"btn minus\" data-c=g data-a=minus>−10%</button>"
-    "<button type=button class=\"btn onoff\" id=togG>Aus</button><button type=button class=\"btn plus\" data-c=g data-a=plus>+10%</button><span id=pctG class=pct>0%</span></div>"
+    "<button type=button class=\"btn onoff\" id=togG>Off</button><button type=button class=\"btn plus\" data-c=g data-a=plus>+10%</button><span id=pctG class=pct>0%</span></div>"
     "<div class=row><span class=\"led led-b\"></span><button type=button class=\"btn minus\" data-c=b data-a=minus>−10%</button>"
-    "<button type=button class=\"btn onoff\" id=togB>Aus</button><button type=button class=\"btn plus\" data-c=b data-a=plus>+10%</button><span id=pctB class=pct>0%</span></div>"
+    "<button type=button class=\"btn onoff\" id=togB>Off</button><button type=button class=\"btn plus\" data-c=b data-a=plus>+10%</button><span id=pctB class=pct>0%</span></div>"
     "<div class=row><span class=\"led led-w\"></span><button type=button class=\"btn minus\" data-c=w data-a=minus>−10%</button>"
-    "<button type=button class=\"btn onoff\" id=togW>Aus</button><button type=button class=\"btn plus\" data-c=w data-a=plus>+10%</button><span id=pctW class=pct>0%</span></div>"
-    "<p><button type=button class=\"btn alloff\" id=alloff>Alle LEDs aus</button></p>"
+    "<button type=button class=\"btn onoff\" id=togW>Off</button><button type=button class=\"btn plus\" data-c=w data-a=plus>+10%</button><span id=pctW class=pct>0%</span></div>"
+    "<p><button type=button class=\"btn alloff\" id=alloff>All LEDs off</button></p>"
     "<p style=margin-top:1rem;><b>Animation (10 s)</b><br>"
     "<select id=animSelect style=padding:0.4rem;background:#333;color:#eee;border-radius:6px;margin-right:0.5rem;>"
-    "<option value=1>Zufallsfade</option><option value=2>Regenbogen</option><option value=3>Weiß aufdrehen</option>"
-    "<option value=4>Sternenfunkeln</option><option value=5>Geburtstag</option><option value=6>Nacht (Rot atmend)</option></select>"
+    "<option value=1>Random fade</option><option value=2>Rainbow</option><option value=3>White ramp</option>"
+    "<option value=4>Star sparkle</option><option value=5>Birthday</option><option value=6>Night (red breathing)</option></select>"
     "<button type=button class=btn id=playAnim style=background:#2a5a2a;color:#9f9;>Go</button></p></main><script>"
     "function load(){ fetch('/api/state').then(function(r){return r.json();}).then(function(d){"
-    "document.getElementById('autoStatus').textContent=d.auto? 'An':'Aus';"
+    "document.getElementById('autoStatus').textContent=d.auto? 'On':'Off';"
     "var ch=['r','g','b','w'], id=['pctR','pctG','pctB','pctW'], tog=['togR','togG','togB','togW'];"
-    "for(var i=0;i<4;i++){ document.getElementById(id[i]).textContent=d[ch[i]]+'%'; document.getElementById(tog[i]).textContent=d[ch[i]]>0?'An':'Aus'; }"
+    "for(var i=0;i<4;i++){ document.getElementById(id[i]).textContent=d[ch[i]]+'%'; document.getElementById(tog[i]).textContent=d[ch[i]]>0?'On':'Off'; }"
     "});}"
     "function post(url,body){ return fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body||''}).then(load);}"
     "document.getElementById('autoOn').onclick=function(){ post('/api/auto','on=1'); };"
@@ -212,7 +212,7 @@ void handleApiAuto() {
 
 void handleApiColor() {
   if (server.method() != HTTP_POST) { server.send(405, F("text/plain"), F("Method Not Allowed")); return; }
-  if (!server.hasArg(F("c")) || !server.hasArg(F("a"))) { server.send(400, F("text/plain"), F("c und a fehlen")); return; }
+  if (!server.hasArg(F("c")) || !server.hasArg(F("a"))) { server.send(400, F("text/plain"), F("c and a required")); return; }
   String c = server.arg(F("c"));
   String a = server.arg(F("a"));
   uint8_t* v = nullptr;
@@ -233,7 +233,7 @@ void handleApiAlloff() {
   server.send(204);
 }
 
-// Animation für 10 s abspielen (1–5 wie unten, 6=Nacht rot atmend)
+// Play animation for 10 s (1–5 as below, 6=night red breathing)
 void handleApiPlay() {
   if (server.method() != HTTP_POST) { server.send(405, F("text/plain"), F("Method Not Allowed")); return; }
   if (!server.hasArg(F("anim"))) { server.send(400, F("text/plain"), F("anim=1..6")); return; }
@@ -263,7 +263,7 @@ void handleApiPlay() {
   server.send(204);
 }
 
-// Prüft, ob das aktuelle Datum (lokal, NTP + TIMEZONE_OFFSET_SEC) ein in birthdays.h eingetragener Tag ist.
+// Returns true if current date (local, NTP + TIMEZONE_OFFSET_SEC) is listed in birthdays.h.
 bool isBirthdayToday(long unixTimeUtc) {
   if (BIRTHDAY_COUNT == 0) return false;
   time_t t = (time_t)(unixTimeUtc + TIMEZONE_OFFSET_SEC);
@@ -278,11 +278,11 @@ bool isBirthdayToday(long unixTimeUtc) {
   return false;
 }
 
-// 0–7 Uhr Ortszeit: nur sanft animiertes Rot, max. 10 % Helligkeit
-#define NIGHT_HOUR_START  0   // 0 Uhr
-#define NIGHT_HOUR_END    7   // 7 Uhr (exklusive)
+// 0–7 h local: only soft animated red, max 10% brightness
+#define NIGHT_HOUR_START  0   // 0:00
+#define NIGHT_HOUR_END    7   // 7:00 (exclusive)
 #define NIGHT_BRIGHTNESS_MAX  25   // 255 * 10% ≈ 25
-#define NIGHT_BRIGHTNESS_MIN  5    // Untere Grenze, damit Rot nie ganz aus geht
+#define NIGHT_BRIGHTNESS_MIN  5    // Lower bound so red never fully off
 
 bool isNightMode(long unixTimeUtc) {
   if (unixTimeUtc <= 0) return false;
@@ -293,9 +293,9 @@ bool isNightMode(long unixTimeUtc) {
   return (hour >= NIGHT_HOUR_START && hour < NIGHT_HOUR_END);
 }
 
-// Sanftes Rot-„Atmen“ (min → max → min), Zyklus ~10 s; geht nie ganz aus
+// Soft red "breathing" (min → max → min), cycle ~10 s; never fully off
 void updateNightRed() {
-  unsigned long phase = millis() % 10000uL;  // 10 s Zyklus
+  unsigned long phase = millis() % 10000uL;  // 10 s cycle
   int pct;
   if (phase < 5000uL)
     pct = (int)(phase * 100 / 5000);
@@ -314,7 +314,7 @@ void setup() {
   USE_SERIAL.println();
   USE_SERIAL.println();
 
-  // LEDs sofort ausschalten (bevor WiFi/OTA – sonst Strip-Zustand unbestimmt)
+  // Turn off LEDs immediately (before WiFi/OTA – otherwise strip state undefined)
   strip.setBrightness(BRIGHTNESS);
   strip.begin();
   setAll(0, 0, 0, 0);
@@ -330,11 +330,11 @@ void setup() {
   }
 
   // ========================================================================================
-  // WiFi: SSID und Passwort aus .credentials (steht in .gitignore).
+  // WiFi: SSID and password from credentials.h (in .gitignore).
   // ========================================================================================
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   Serial.print("Connecting");
-  const unsigned long wifiTimeout = 10000;  // 10 s, danach ohne WiFi weitermachen (Testbed)
+  const unsigned long wifiTimeout = 10000;  // 10 s, then continue without WiFi (test bed)
   unsigned long wifiStart = millis();
   while (WiFi.status() != WL_CONNECTED && (millis() - wifiStart) < wifiTimeout) {
     delay(500);
@@ -345,7 +345,7 @@ void setup() {
     Serial.print("Connected, IP address: ");
     Serial.println(WiFi.localIP());
   } else {
-    Serial.println("Kein WiFi (Timeout). Fahre ohne Netzwerk fort – PIR/LED funktionieren.");
+    Serial.println("No WiFi (timeout). Continuing without network – PIR/LED still work.");
   }
   // print MAC address, uncomment if needed
   // byte mac[6];
@@ -360,22 +360,22 @@ void setup() {
   // ========================================================================================
 
   
-  // OTA: Du pushst neue Firmware von Cursor/PC aus (arduino-cli upload -p <ESP-IP>).
-  // ESP holt nichts selbst von einem Server.
+  // OTA: you push new firmware from Cursor/PC (arduino-cli upload -p <ESP-IP>).
+  // ESP does not fetch anything from a server by itself.
   if (WiFi.status() == WL_CONNECTED) {
     ArduinoOTA.setHostname(OTA_HOSTNAME);
     ArduinoOTA.onStart([]() {
-      Serial.printf("OTA Start – freier Heap: %u Byte\n", ESP.getFreeHeap());
+      Serial.printf("OTA start – free heap: %u bytes\n", ESP.getFreeHeap());
     });
     ArduinoOTA.onEnd([]() {
-      Serial.println("\nOTA Ende – warte 2 s vor Neustart (damit OK an PC geht).");
-      delay(2000);  // Verhindert Timeout in espota: ESP muss OK senden, bevor er neu startet
+      Serial.println("\nOTA end – waiting 2 s before restart (so OK reaches PC).");
+      delay(2000);  // Prevents timeout in espota: ESP must send OK before restarting
     });
     ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-      Serial.printf("OTA Fortschritt: %u%%\r", (progress / (total / 100)));
+      Serial.printf("OTA progress: %u%%\r", (progress / (total / 100)));
     });
     ArduinoOTA.onError([](ota_error_t error) {
-      Serial.printf("OTA Fehler[%u]: ", error);
+      Serial.printf("OTA error[%u]: ", error);
       if (error == OTA_AUTH_ERROR) Serial.println("Auth");
       else if (error == OTA_BEGIN_ERROR) Serial.println("Begin");
       else if (error == OTA_CONNECT_ERROR) Serial.println("Connect");
@@ -384,11 +384,11 @@ void setup() {
     });
     ArduinoOTA.begin();
 #if DEBUG
-  Serial.println("OTA bereit. Upload von PC: arduino-cli upload -p " + WiFi.localIP().toString() + " ...");
+  Serial.println("OTA ready. Upload from PC: arduino-cli upload -p " + WiFi.localIP().toString() + " ...");
 #endif
   }
 
-  // Web-Server: Frontend cachebar (GET /), API GET/POST
+  // Web server: frontend cacheable (GET /), API GET/POST
   server.on(F("/"), handleIndex);
   server.on(F("/index.html"), handleIndex);
   server.on(F("/api/state"), HTTP_GET, handleApiState);
@@ -399,10 +399,10 @@ void setup() {
   server.onNotFound([]() { server.send(404, F("text/plain"), F("Not Found")); });
   server.begin();
 #if DEBUG
-  Serial.println("Web-Server: http://" + WiFi.localIP().toString());
+  Serial.println("Web server: http://" + WiFi.localIP().toString());
 #endif
 
-  // Strip bereits am Anfang initialisiert; hier nur sicherstellen, dass aus
+  // Strip already initialised at start; here just ensure off
   setAll(0, 0, 0, 0);
   strip.show();
 
@@ -414,15 +414,15 @@ void setup() {
 
 #if DEBUG
   Serial.println();
-  Serial.println("=== Setup fertig ===");
-  Serial.println("LEDs aus. PIR1 = D0/GPIO16 (oben), PIR2 = D2/GPIO4 (unten).");
-  Serial.println("Warte auf Bewegung... (PIR=HIGH = ausgelöst)");
+  Serial.println("=== Setup complete ===");
+  Serial.println("LEDs off. PIR1 = D0/GPIO16 (up), PIR2 = D2/GPIO4 (down).");
+  Serial.println("Waiting for motion... (PIR=HIGH = triggered)");
   Serial.println("================================");
 #endif
 
-  // Boot-Signal: 3× grün aufblinken (1 s an, 1 s Pause), 50 % Helligkeit
+  // Boot signal: 3× green blink (1 s on, 1 s pause), 50% brightness
   for (int b = 0; b < 3; b++) {
-    setAll(0, 127, 0, 0);   // Grün, 50 % (127/255)
+    setAll(0, 127, 0, 0);   // Green, 50% (127/255)
     strip.show();
     delay(1000);
     setAll(0, 0, 0, 0);
@@ -436,15 +436,15 @@ void loop() {
   int count = 0;
   String dir = "";
   int currenttime = 0;
-  int lastPir1 = -1, lastPir2 = -1;  // für Debug: Änderung erkennen
-  static int lastAnimation = 0;      // 0 = noch keine, 1–4 = letzte gewählte Animation (keine Doppel)
+  int lastPir1 = -1, lastPir2 = -1;  // for debug: detect change
+  static int lastAnimation = 0;      // 0 = none yet, 1–4 = last chosen animation (no repeat)
   static bool wasNightMode = false;
   while (true) {
     handleNetwork();
     watchdogCount = 0;
     bool night = isNightMode(currenttime);
 
-    // 0–7 Uhr: nur rot, sanft animiert, max. 10 % Helligkeit (kein PIR, kein Manual)
+    // 0–7 h: only red, soft animated, max 10% brightness (no PIR, no manual)
     if (night) {
       updateNightRed();
       if (!wasNightMode) wasNightMode = true;
@@ -460,14 +460,14 @@ void loop() {
     int pir2 = digitalRead(PIR2);
 
 #if DEBUG
-    // Alle ~2 s: PIR-Zustand ausgeben (Heartbeat)
+    // Every ~2 s: print PIR state (heartbeat)
     if (count % 20 == 0) {
       Serial.printf("[%lu] PIR1=%s PIR2=%s  (PIR1=UP, PIR2=DOWN)\n",
                     millis() / 1000, pir1 == HIGH ? "HIGH" : "low ", pir2 == HIGH ? "HIGH" : "low ");
     }
-    // Bei Zustandsänderung sofort melden
+    // Report immediately on state change
     if (pir1 != lastPir1 || pir2 != lastPir2) {
-      Serial.printf("      PIR geändert -> PIR1=%s PIR2=%s\n", pir1 == HIGH ? "HIGH" : "low ", pir2 == HIGH ? "HIGH" : "low ");
+      Serial.printf("      PIR changed -> PIR1=%s PIR2=%s\n", pir1 == HIGH ? "HIGH" : "low ", pir2 == HIGH ? "HIGH" : "low ");
       lastPir1 = pir1;
       lastPir2 = pir2;
     }
@@ -476,20 +476,20 @@ void loop() {
     if (pir1 == HIGH) { dir = "UP"; }
     if (pir2 == HIGH) { dir = "DOWN"; }
 
-    // PIR-Animation nur außerhalb des Nachtmodus
+    // PIR animation only outside night mode
     if (!night && automationOn && dir != "") {
 #if DEBUG
-      Serial.println(">>> PIR ausgelöst: " + dir + " -> starte Animation");
+      Serial.println(">>> PIR triggered: " + dir + " -> starting animation");
 #endif
       if (isBirthdayToday(currenttime)) {
         birthday(dir);
-        // 10 s Pause nach Geburtstags-Animation (wie bei den anderen)
+        // 10 s delay after birthday animation (same as others)
         for (unsigned long t = millis(); millis() - t < (unsigned long)POST_ANIM_DELAY_MS; ) {
           handleNetwork();
           delay(100);
         }
       } else {
-        // Zufall 1–4, aber nicht dieselbe Animation wie beim letzten Mal
+        // Random 1–4, but not same animation as last time
         int choice;
         do {
           choice = random(1, 5);
@@ -510,7 +510,7 @@ void loop() {
             starSparkle(dir);
             break;
         }
-        // 10 s Pause nach Animation (OTA und Web bleiben erreichbar)
+        // 10 s delay after animation (OTA and web stay available)
         for (unsigned long t = millis(); millis() - t < (unsigned long)POST_ANIM_DELAY_MS; ) {
           handleNetwork();
           delay(100);
@@ -522,7 +522,7 @@ void loop() {
     if (count++ > 100) {
       currenttime = ntpClient.getUnixTime();
 #if DEBUG
-      Serial.printf("NTP Zeit: %d\n", currenttime);
+      Serial.printf("NTP time: %d\n", currenttime);
 #endif
       count = 0;
     }

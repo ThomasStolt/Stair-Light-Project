@@ -1,231 +1,231 @@
 # Stair Light Project
 
-Automatische, animierte Treppenbeleuchtung mit **SK6812 RGBW**-LEDs. Zwei PIR-Sensoren (SR-HC501) an erster und letzter Stufe erkennen die Laufrichtung und starten eine zufällige Animation. Steuerung per **Web-UI** (Treppenautomatik An/Aus, manuelle Farben, Animationen 10 s testen) und optional **Nachtmodus** (0–7 Uhr: nur rot, atmend).
+Automatic animated stair lighting with **SK6812 RGBW** LEDs. Two PIR sensors (SR-HC501) at the first and last step detect direction and trigger a random animation. Control via **web UI** (stair automation on/off, manual colours, 10 s animation test) and optional **night mode** (0–7 h: red only, breathing).
 
-- **MCU:** ESP8266 (z. B. NodeMCU)
-- **LEDs:** SK6812 RGBW (kompatibel zu WS2812), 27 LEDs pro Stufe, 16 Stufen (konfigurierbar)
-- **Sensoren:** PIR1 = „hoch“, PIR2 = „runter“
-- **Start:** Treppenautomatik ist nach dem Boot **aus**; 3× grünes Blinken signalisiert „bereit“.
+- **MCU:** ESP8266 (e.g. NodeMCU)
+- **LEDs:** SK6812 RGBW (WS2812-compatible), 27 LEDs per step, 16 steps (configurable)
+- **Sensors:** PIR1 = “up”, PIR2 = “down”
+- **Boot:** Stair automation is **off** after boot; 3× green blink indicates “ready”.
 
 ![Stair Light test bed](images/IMG_1958.jpg)
 
 ---
 
-## Voraussetzungen
+## Requirements
 
-- **Arduino CLI** (z. B. `brew install arduino-cli`)
-- **ESP8266-Core:**  
+- **Arduino CLI** (e.g. `brew install arduino-cli`)
+- **ESP8266 core:**  
   `arduino-cli core update-index && arduino-cli core install esp8266:esp8266`
-- **Bibliotheken:**  
+- **Libraries:**  
   `arduino-cli lib install "Adafruit NeoPixel"`  
   `arduino-cli lib install "EasyNTPClient"`
 
 ---
 
-## Projektstruktur
+## Project structure
 
-| Ordner/Datei | Beschreibung |
-|--------------|--------------|
-| `rgbw_stair_light/` | Haupt-Sketch (Treppenlicht + OTA) |
-| `rgbw_stair_light/parking.h` | Animationen und Hilfsfunktionen |
-| `rgbw_stair_light/birthdays.h.example` | Vorlage für Geburtstage (kopieren nach `birthdays.h`) |
-| `minimal_ota/` | Minimal-Sketch nur WiFi + OTA (zum Testen) |
-| `RGBWstrandtest/` | Separater LED-Strip-Test (ohne PIR) |
-| `schematics/` | KiCad-Schaltplan, PCB |
-| `images/` | Fotos (u. a. Testbett) |
+| Folder/File | Description |
+|-------------|-------------|
+| `rgbw_stair_light/` | Main sketch (stair light + OTA) |
+| `rgbw_stair_light/parking.h` | Animations and helpers |
+| `rgbw_stair_light/birthdays.h.example` | Template for birthdays (copy to `birthdays.h`) |
+| `minimal_ota/` | Minimal sketch (WiFi + OTA only, for testing) |
+| `RGBWstrandtest/` | Separate LED strip test (no PIR) |
+| `schematics/` | KiCad schematic, PCB |
+| `images/` | Photos (incl. test bed) |
 
-**Skripte (im Projektroot):**
+**Scripts (project root):**
 
-| Skript | Funktion |
-|--------|----------|
-| `upload-to-esp8266.sh` | Compile + Upload **per USB** |
-| `upload-to-esp8266-ota.sh` | Compile + Upload **per OTA** (WiFi) |
-| `upload-ota-firewall-ok.sh` | OTA mit **temporär ausgeschalteter Firewall** (macOS) |
-| `upload-minimal-via-usb.sh` | Minimal-Sketch per USB flashen |
-| `upload-minimal-ota.sh` | Minimal-Sketch per OTA flashen (Test) |
-| `setup-firewall-ota.sh` | Firewall-Regel für OTA-Python setzen (macOS, sudo) |
+| Script | Purpose |
+|--------|---------|
+| `upload-to-esp8266.sh` | Compile + upload **via USB** |
+| `upload-to-esp8266-ota.sh` | Compile + upload **via OTA** (WiFi) |
+| `upload-ota-firewall-ok.sh` | OTA with **firewall temporarily disabled** (macOS) |
+| `upload-minimal-via-usb.sh` | Flash minimal sketch via USB |
+| `upload-minimal-ota.sh` | Flash minimal sketch via OTA (test) |
+| `setup-firewall-ota.sh` | Add firewall rule for OTA (macOS, sudo) |
 
 ---
 
-## Einrichtung
+## Setup
 
-### 1. WiFi und Hostname
+### 1. WiFi and hostname
 
-Die Zugangsdaten liegen in **`rgbw_stair_light/credentials.h`** (wird von Git ignoriert).
+Credentials go in **`rgbw_stair_light/credentials.h`** (gitignored).
 
-- **Neu:** `credentials.h.example` nach `credentials.h` kopieren und anpassen:
-  - `WIFI_SSID` – dein WLAN-Name  
-  - `WIFI_PASS` – WLAN-Passwort  
-  - `OTA_HOSTNAME` – z. B. `stairlight-testbed` oder `stairlight-treppe`
+- Copy `credentials.h.example` to `credentials.h` and set:
+  - `WIFI_SSID` – your Wi‑Fi name  
+  - `WIFI_PASS` – Wi‑Fi password  
+  - `OTA_HOSTNAME` – e.g. `stairlight-testbed` or `stairlight`
 
-Ohne `credentials.h` bricht der Build ab. Für den Minimal-Sketch: `minimal_ota/credentials.h` anlegen (oder aus `rgbw_stair_light/` kopieren).
+Without `credentials.h` the build fails. For the minimal sketch: create `minimal_ota/credentials.h` (or copy from `rgbw_stair_light/`).
 
-### 2. Geburtstage (optional)
+### 2. Birthdays (optional)
 
-An Tagen, die in **`rgbw_stair_light/birthdays.h`** eingetragen sind, läuft nur die Geburtstags-Animation.
+On dates listed in **`rgbw_stair_light/birthdays.h`**, only the birthday animation runs.
 
-- **`birthdays.h`** liegt in der `.gitignore` und wird nicht ins Repo committed.
-- Vorlage: `birthdays.h.example` nach `birthdays.h` kopieren, `BIRTHDAY_COUNT` und die Liste `BIRTHDAY(Monat, Tag)` anpassen (z. B. `BIRTHDAY(3, 15)` = 15. März).
-- Ohne `birthdays.h` bricht der Build ab – also nach dem Klonen die Example-Datei kopieren (bei Bedarf mit 0 Einträgen).
+- **`birthdays.h`** is in `.gitignore` and is not committed.
+- Copy `birthdays.h.example` to `birthdays.h`, set `BIRTHDAY_COUNT` and the `BIRTHDAY(month, day)` list (e.g. `BIRTHDAY(3, 15)` = 15 March).
+- Without `birthdays.h` the build fails – after cloning, copy the example (use 0 entries if you don’t need birthdays).
 
-### 3. Firewall (macOS, nur bei OTA-Problemen)
+### 3. Firewall (macOS, only if OTA fails)
 
-Wenn OTA mit aktiver Firewall fehlschlägt:
+If OTA fails with the firewall on:
 
-- **Variante A – Regel per CLI:**    
+- **Option A – rule via CLI:**  
   `sudo ./setup-firewall-ota.sh`  
-  (erlaubt Arduino-Python und Terminal/Cursor eingehende Verbindungen)
+  (allows Arduino Python and Terminal/Cursor to accept incoming connections)
 
-- **Variante B – OTA mit kurz ausgeschalteter Firewall:**  
+- **Option B – OTA with firewall briefly off:**  
   `./upload-ota-firewall-ok.sh stairlight-testbed.local`  
-  (Firewall wird nur während des Uploads aus- und danach wieder eingeschaltet)
+  (firewall is disabled only during the upload, then re-enabled)
 
 ---
 
-## Erster Upload: per USB
+## First upload: via USB
 
-1. ESP8266 per USB verbinden.
-2. Port prüfen (optional):  
+1. Connect the ESP8266 via USB.
+2. Check port (optional):  
    `arduino-cli board list`
-3. Im Projektordner ausführen:
+3. From the project folder run:
 
    ```bash
    ./upload-to-esp8266.sh
    ```
 
-   Standard-Port ist `/dev/cu.usbserial-0001`. Anderen Port angeben:
+   Default port is `/dev/cu.usbserial-0001`. To use another port:
 
    ```bash
    ./upload-to-esp8266.sh /dev/cu.wchusbserial-12345
    ```
 
-4. Nach erfolgreichem Upload verbindet sich der ESP mit dem WLAN und wartet auf OTA.
+4. After a successful upload the ESP connects to Wi‑Fi and is ready for OTA.
 
 ---
 
-## Upload per OTA (WiFi)
+## Upload via OTA (WiFi)
 
-Voraussetzung: Der ESP läuft bereits mit einer Firmware, die **ArduinoOTA** nutzt (z. B. nach dem ersten USB-Upload), und ist im gleichen WLAN.
+Prerequisite: the ESP is already running firmware with **ArduinoOTA** (e.g. after the first USB upload) and is on the same Wi‑Fi network.
 
-- **Ziel per Hostname (mDNS):**  
+- **By hostname (mDNS):**  
   ```bash
   ./upload-to-esp8266-ota.sh stairlight-testbed.local
   ```
 
-- **Ziel per IP:**  
+- **By IP:**  
   ```bash
   ./upload-to-esp8266-ota.sh 192.168.2.185
   ```
 
-Die IP erscheint im Serial Monitor nach „Connected, IP address:“ bzw. „Web-Server: http://…“.
+The IP is shown in the serial monitor after “Connected, IP address:” or “Web-Server: http://…”.
 
-**Web-Steuerung:** Im Browser `http://<IP>` oder `http://<OTA_HOSTNAME>.local` öffnen.
+**Web UI:** Open `http://<IP>` or `http://<OTA_HOSTNAME>.local` in a browser.
 
-- **Treppenautomatik** An/Aus (nach Boot standardmäßig Aus).
-- **Manuelle Farben:** Pro Kanal (Rot, Grün, Blau, Weiss) −10 %, An/Aus, +10 % Helligkeit; Anzeige in %.
-- **Alle LEDs aus.**
-- **Animation (10 s):** Dropdown mit Zufallsfade, Regenbogen, Weiß aufdrehen, Sternenfunkeln, Geburtstag, **Nacht (Rot atmend)** – mit **Go** wird die gewählte Animation 10 Sekunden abgespielt (unabhängig von der Uhrzeit).
+- **Stair automation** on/off (off by default after boot).
+- **Manual colours:** Per channel (red, green, blue, white): −10%, on/off, +10% brightness; value shown in %.
+- **All LEDs off.**
+- **Animation (10 s):** Dropdown with Random fade, Rainbow, White ramp, Star sparkle, Birthday, **Night (red breathing)** – use **Go** to run the selected animation for 10 seconds (any time of day).
 
-Das Frontend wird vom Browser gecacht; Aktionen laufen per API (GET State, POST für Aktionen). Webserver und OTA bleiben auch während laufender Animationen erreichbar.
+The frontend is cached by the browser; actions use the API (GET state, POST for actions). Web server and OTA stay available during animations.
 
-**Wenn die Firewall (macOS) OTA blockiert:**  
-Statt `upload-to-esp8266-ota.sh` das Wrapper-Skript nutzen:
+**If the firewall (macOS) blocks OTA:**  
+Use the wrapper script instead of `upload-to-esp8266-ota.sh`:
 
 ```bash
 ./upload-ota-firewall-ok.sh stairlight-testbed.local
 ```
 
-Damit wird die Firewall nur während des Uploads kurz deaktiviert und danach wieder aktiviert.
+The firewall is then disabled only during the upload and re-enabled afterwards.
 
-**Debug-Ausgabe von espota:**  
+**espota debug output:**  
 ```bash
 ./upload-to-esp8266-ota.sh stairlight-testbed.local --debug
 ```
 
 ---
 
-## Serial Monitor
+## Serial monitor
 
-Baudrate: **115200**.
+Baud rate: **115200**.
 
-- **Per Task (Cursor/VS Code):**  
-  `Cmd+Shift+P` → „Tasks: Run Task“ → „Serial Monitor (115200 Baud)“ → Port eingeben.
+- **Via task (Cursor/VS Code):**  
+  `Cmd+Shift+P` → “Tasks: Run Task” → “Serial Monitor (115200 Baud)” → enter port.
 
-- **Per Terminal:**  
+- **Via terminal:**  
   ```bash
   arduino-cli monitor -p /dev/cu.usbserial-0001 -c baudrate=115200
   ```
 
-Port ggf. anpassen (`arduino-cli board list`). Beenden mit `Ctrl+C`. Während der Monitor läuft, ist der USB-Port belegt (kein Upload möglich).
+Adjust the port if needed (`arduino-cli board list`). Exit with `Ctrl+C`. While the monitor is running the USB port is in use (no upload).
 
-**Hinweis:** Mit `USE_SERIAL.setDebugOutput(true)` (im Sketch) gibt die ESP8266-WiFi-Bibliothek zusätzlich Verbindungsmeldungen aus (`state:`, `reconnect`, `scandone` usw.). Bei stabilem WLAN kann man das mit `setDebugOutput(false)` abschalten, um nur PIR/NTP und eigene Meldungen zu sehen.
-
----
-
-## Nachtmodus (0–7 Uhr)
-
-Zwischen **0 und 7 Uhr Ortszeit** (NTP + `TIMEZONE_OFFSET_SEC`):
-
-- Es läuft **nur** die **Nacht-Animation**: sanft atmendes Rot, max. 10 % Helligkeit, **geht nicht ganz aus** (Mindesthelligkeit konfigurierbar).
-- PIR und manuelle Web-Farben haben keine Wirkung.
-- Ab 7 Uhr schaltet der Strip aus und das normale Verhalten (Automatik/Manual) gilt wieder.
-
-Die gleiche „Nacht (Rot atmend)“-Animation kann jederzeit im Web unter **Animation (10 s)** → **Go** für 10 Sekunden getestet werden.
+**Note:** With `USE_SERIAL.setDebugOutput(true)` in the sketch, the ESP8266 WiFi library also prints connection messages (`state:`, `reconnect`, `scandone`, etc.). For a quieter monitor you can set `setDebugOutput(false)` to see only PIR/NTP and your own messages.
 
 ---
 
-## Konfiguration im Sketch
+## Night mode (0–7 h)
 
-In **`rgbw_stair_light/rgbw_stair_light.ino`** (bzw. `parking.h`):
+Between **0:00 and 7:00 local time** (NTP + `TIMEZONE_OFFSET_SEC`):
 
-| Konstante | Bedeutung | Standard |
-|-----------|------------|----------|
-| `STEPS` | Anzahl Stufen | 16 |
-| `WIDTH` | LEDs pro Stufe | 27 |
-| `ANIM_DURATION` | Dauer einer PIR-Animation (ms) | 20000 |
-| `POST_ANIM_DELAY_MS` | Pause nach Animation bis zur nächsten Reaktion (ms) | 10000 |
-| `BRIGHTNESS` | LED-Helligkeit 0–255 | 255 |
-| `DEBUG` | 1 = PIR/Trigger im Serial Monitor | 1 |
-| `TIMEZONE_OFFSET_SEC` | Sekunden UTC→Ortszeit (z. B. 3600 für CET) | 3600 |
-| `NIGHT_HOUR_START` / `NIGHT_HOUR_END` | Nachtmodus von Stunde … bis (exkl.) | 0, 7 |
-| `NIGHT_BRIGHTNESS_MAX` / `NIGHT_BRIGHTNESS_MIN` | Rot im Nachtmodus max./min. (0–255) | 25, 5 |
+- Only the **night animation** runs: soft breathing red, max 10% brightness, **never fully off** (minimum brightness is configurable).
+- PIR and manual web colours have no effect.
+- After 7:00 the strip turns off and normal behaviour (automation/manual) applies again.
 
-Pins (laut Kommentar im Sketch): NeoPixel = GPIO 14 (D5), PIR1 = GPIO 16 (D0), PIR2 = GPIO 4 (D2). GPIO 15 und 2 nicht verwenden (Boot-Verhalten).
+The same “Night (red breathing)” animation can be tested anytime in the web UI under **Animation (10 s)** → **Go** for 10 seconds.
 
 ---
 
-## Minimal-OTA-Test
+## Sketch configuration
 
-Zum Prüfen, ob OTA grundsätzlich funktioniert (ohne vollen Sketch):
+In **`rgbw_stair_light/rgbw_stair_light.ino`** (and `parking.h`):
 
-1. Minimal-Sketch per USB flashen:  
+| Constant | Meaning | Default |
+|----------|---------|---------|
+| `STEPS` | Number of steps | 16 |
+| `WIDTH` | LEDs per step | 27 |
+| `ANIM_DURATION` | Duration of a PIR-triggered animation (ms) | 20000 |
+| `POST_ANIM_DELAY_MS` | Delay after animation before next trigger (ms) | 10000 |
+| `BRIGHTNESS` | LED brightness 0–255 | 255 |
+| `DEBUG` | 1 = PIR/trigger on serial monitor | 1 |
+| `TIMEZONE_OFFSET_SEC` | Seconds UTC→local (e.g. 3600 for CET) | 3600 |
+| `NIGHT_HOUR_START` / `NIGHT_HOUR_END` | Night mode from hour … to (excl.) | 0, 7 |
+| `NIGHT_BRIGHTNESS_MAX` / `NIGHT_BRIGHTNESS_MIN` | Red in night mode max/min (0–255) | 25, 5 |
+
+Pins (see comments in sketch): NeoPixel = GPIO 14 (D5), PIR1 = GPIO 16 (D0), PIR2 = GPIO 4 (D2). Do not use GPIO 15 and 2 (boot behaviour).
+
+---
+
+## Minimal OTA test
+
+To check that OTA works at all (without the full sketch):
+
+1. Flash the minimal sketch via USB:  
    `./upload-minimal-via-usb.sh`
-2. OTA des Minimal-Sketches testen:  
+2. Test OTA of the minimal sketch:  
    `./upload-minimal-ota.sh stairlight-testbed.local --debug`
 
-Wenn das durchläuft, OTA funktioniert; Probleme beim vollen Sketch können z. B. an Speicher oder Firewall liegen.
+If that works, OTA is fine; issues with the full sketch may be due to memory or firewall.
 
 ---
 
-## Animationen
+## Animations
 
-Die Richtung (hoch/runter) wird über PIR1/PIR2 erkannt. Bei eingeschalteter Treppenautomatik wird zufällig eine der folgenden Animationen gestartet (ohne direkte Wiederholung):
+Direction (up/down) is detected via PIR1/PIR2. With stair automation on, a random one of these animations runs (no back-to-back repeat):
 
-- **Zufallsfade** (`simpleFadeToRandom`) – Stufen nacheinander in Zufallsfarbe ein-/ausblenden  
-- **Regenbogen** (`rainbowSteps`) – Regenbogen pro Stufe, dann Lauf  
-- **Weiß aufdrehen** (`FadeToFullBrightness`) – alle Stufen auf Weiß  
-- **Sternenfunkeln** (`starSparkle`) – dunkelblauer Hintergrund mit weißen „Sternen“
+- **Random fade** (`simpleFadeToRandom`) – steps fade in/out in a random colour  
+- **Rainbow** (`rainbowSteps`) – rainbow per step, then run  
+- **White ramp** (`FadeToFullBrightness`) – all steps to white  
+- **Star sparkle** (`starSparkle`) – dark blue background with white “stars”
 
-An **Geburtstagen** (laut `birthdays.h`) läuft nur die **Geburtstags-Animation** (bunte Zufallsfarben, 50 % Helligkeit).
+On **birthdays** (from `birthdays.h`) only the **birthday animation** runs (random colours, 50% brightness).
 
-Im Web unter **Animation (10 s)** können alle genannten plus **Nacht (Rot atmend)** für 10 Sekunden per „Go“ getestet werden.
+In the web UI under **Animation (10 s)** you can test all of the above plus **Night (red breathing)** for 10 seconds with “Go”.
 
-Weitere Funktionen und mögliche neue Animationen stehen in **`parking.h`**.
+More functions and possible new animations are in **`parking.h`**.
 
 ---
 
-## Lizenz / Kontakt
+## License / contact
 
-Ursprünglich ab Oktober 2016; Sketch und Struktur mehrfach erweitert (u. a. OTA, Credentials, Web-API, Nachtmodus, Geburtstage, Firewall-Workaround).
+Originally from October 2016; sketch and structure have been extended (OTA, credentials, web API, night mode, birthdays, firewall workaround).
 
-Bei Fragen oder Ideen für neue Animationen: Repository-Inhaber kontaktieren.
+For questions or ideas for new animations, contact the repository owner.

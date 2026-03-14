@@ -1,12 +1,12 @@
 #include <ArduinoOTA.h>
 
-extern uint32_t g_animDurationOverrideMs;  // wenn >0: Laufzeit für Animation (z. B. 10000 = 10 s „Go“)
+extern uint32_t g_animDurationOverrideMs;  // if >0: duration for animation (e.g. 10000 = 10 s "Go")
 
 // ===================================================================================
 // FUNCTION NAME
 // testPIRs
 // -----------------------------------------------------------------------------------
-// Continiously reads the PIRs and switches the first or last LED of the first step
+// Continuously reads the PIRs and switches the first or last LED of the first step
 // to full green
 // -----------------------------------------------------------------------------------
 void testPIRs () {
@@ -394,7 +394,7 @@ void setStepRndm(int s, int c){
   int step_end = step_start + WIDTH;
   for(int i=step_start;i<step_end;i++){
     uint32_t col = Wheel((byte)random(255));
-    uint8_t rv = (uint8_t)red(col) / 2;    // 50 % Helligkeit
+    uint8_t rv = (uint8_t)red(col) / 2;    // 50% brightness
     uint8_t gv = (uint8_t)green(col) / 2;
     uint8_t bv = (uint8_t)blue(col) / 2;
     strip.setPixelColor(i, strip.Color(rv, gv, bv, 0));
