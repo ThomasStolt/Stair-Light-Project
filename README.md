@@ -1,10 +1,11 @@
 # Stair Light Project
 
-Automatische, animierte Treppenbeleuchtung mit **SK6812 RGBW**-LEDs. Zwei PIR-Sensoren (SR-HC501) an erster und letzter Stufe erkennen die Laufrichtung und starten eine zufällige Animation.
+Automatische, animierte Treppenbeleuchtung mit **SK6812 RGBW**-LEDs. Zwei PIR-Sensoren (SR-HC501) an erster und letzter Stufe erkennen die Laufrichtung und starten eine zufällige Animation. Steuerung per **Web-UI** (Treppenautomatik An/Aus, manuelle Farben, Animationen 10 s testen) und optional **Nachtmodus** (0–7 Uhr: nur rot, atmend).
 
 - **MCU:** ESP8266 (z. B. NodeMCU)
 - **LEDs:** SK6812 RGBW (kompatibel zu WS2812), 27 LEDs pro Stufe, 16 Stufen (konfigurierbar)
 - **Sensoren:** PIR1 = „hoch“, PIR2 = „runter“
+- **Start:** Treppenautomatik ist nach dem Boot **aus**; 3× grünes Blinken signalisiert „bereit“.
 
 ![Stair Light test bed](images/IMG_1958.jpg)
 
@@ -118,7 +119,14 @@ Voraussetzung: Der ESP läuft bereits mit einer Firmware, die **ArduinoOTA** nut
 
 Die IP erscheint im Serial Monitor nach „Connected, IP address:“ bzw. „Web-Server: http://…“.
 
-**Web-Steuerung:** Im Browser `http://<IP>` oder `http://<OTA_HOSTNAME>.local` öffnen. Dort: Treppenautomatik An/Aus, pro Farbe (Rot/Grün/Blau/Weiss) Helligkeit −10 % / An-Aus / +10 %, sowie „Alle LEDs aus“.
+**Web-Steuerung:** Im Browser `http://<IP>` oder `http://<OTA_HOSTNAME>.local` öffnen.
+
+- **Treppenautomatik** An/Aus (nach Boot standardmäßig Aus).
+- **Manuelle Farben:** Pro Kanal (Rot, Grün, Blau, Weiss) −10 %, An/Aus, +10 % Helligkeit; Anzeige in %.
+- **Alle LEDs aus.**
+- **Animation (10 s):** Dropdown mit Zufallsfade, Regenbogen, Weiß aufdrehen, Sternenfunkeln, Geburtstag, **Nacht (Rot atmend)** – mit **Go** wird die gewählte Animation 10 Sekunden abgespielt (unabhängig von der Uhrzeit).
+
+Das Frontend wird vom Browser gecacht; Aktionen laufen per API (GET State, POST für Aktionen). Webserver und OTA bleiben auch während laufender Animationen erreichbar.
 
 **Wenn die Firewall (macOS) OTA blockiert:**  
 Statt `upload-to-esp8266-ota.sh` das Wrapper-Skript nutzen:
@@ -150,6 +158,20 @@ Baudrate: **115200**.
 
 Port ggf. anpassen (`arduino-cli board list`). Beenden mit `Ctrl+C`. Während der Monitor läuft, ist der USB-Port belegt (kein Upload möglich).
 
+**Hinweis:** Mit `USE_SERIAL.setDebugOutput(true)` (im Sketch) gibt die ESP8266-WiFi-Bibliothek zusätzlich Verbindungsmeldungen aus (`state:`, `reconnect`, `scandone` usw.). Bei stabilem WLAN kann man das mit `setDebugOutput(false)` abschalten, um nur PIR/NTP und eigene Meldungen zu sehen.
+
+---
+
+## Nachtmodus (0–7 Uhr)
+
+Zwischen **0 und 7 Uhr Ortszeit** (NTP + `TIMEZONE_OFFSET_SEC`):
+
+- Es läuft **nur** die **Nacht-Animation**: sanft atmendes Rot, max. 10 % Helligkeit, **geht nicht ganz aus** (Mindesthelligkeit konfigurierbar).
+- PIR und manuelle Web-Farben haben keine Wirkung.
+- Ab 7 Uhr schaltet der Strip aus und das normale Verhalten (Automatik/Manual) gilt wieder.
+
+Die gleiche „Nacht (Rot atmend)“-Animation kann jederzeit im Web unter **Animation (10 s)** → **Go** für 10 Sekunden getestet werden.
+
 ---
 
 ## Konfiguration im Sketch
@@ -160,9 +182,13 @@ In **`rgbw_stair_light/rgbw_stair_light.ino`** (bzw. `parking.h`):
 |-----------|------------|----------|
 | `STEPS` | Anzahl Stufen | 16 |
 | `WIDTH` | LEDs pro Stufe | 27 |
-| `ANIM_DURATION` | Max. Dauer einer Animation (ms) | 20000 |
+| `ANIM_DURATION` | Dauer einer PIR-Animation (ms) | 20000 |
+| `POST_ANIM_DELAY_MS` | Pause nach Animation bis zur nächsten Reaktion (ms) | 10000 |
 | `BRIGHTNESS` | LED-Helligkeit 0–255 | 255 |
 | `DEBUG` | 1 = PIR/Trigger im Serial Monitor | 1 |
+| `TIMEZONE_OFFSET_SEC` | Sekunden UTC→Ortszeit (z. B. 3600 für CET) | 3600 |
+| `NIGHT_HOUR_START` / `NIGHT_HOUR_END` | Nachtmodus von Stunde … bis (exkl.) | 0, 7 |
+| `NIGHT_BRIGHTNESS_MAX` / `NIGHT_BRIGHTNESS_MIN` | Rot im Nachtmodus max./min. (0–255) | 25, 5 |
 
 Pins (laut Kommentar im Sketch): NeoPixel = GPIO 14 (D5), PIR1 = GPIO 16 (D0), PIR2 = GPIO 4 (D2). GPIO 15 und 2 nicht verwenden (Boot-Verhalten).
 
@@ -183,19 +209,23 @@ Wenn das durchläuft, OTA funktioniert; Probleme beim vollen Sketch können z.�
 
 ## Animationen
 
-Die Richtung (hoch/runter) wird über PIR1/PIR2 erkannt. Es wird zufällig eine der folgenden Animationen gestartet (ohne direkte Wiederholung):
+Die Richtung (hoch/runter) wird über PIR1/PIR2 erkannt. Bei eingeschalteter Treppenautomatik wird zufällig eine der folgenden Animationen gestartet (ohne direkte Wiederholung):
 
-- `simpleFadeToRandom` – Stufen nacheinander in Zufallsfarbe ein-/ausblenden  
-- `rainbowSteps` – Regenbogen pro Stufe, dann Lauf  
-- `FadeToFullBrightness` – alle Stufen auf Weiß  
-- `starSparkle` – dunkelblauer Hintergrund mit weißen „Sternen“
+- **Zufallsfade** (`simpleFadeToRandom`) – Stufen nacheinander in Zufallsfarbe ein-/ausblenden  
+- **Regenbogen** (`rainbowSteps`) – Regenbogen pro Stufe, dann Lauf  
+- **Weiß aufdrehen** (`FadeToFullBrightness`) – alle Stufen auf Weiß  
+- **Sternenfunkeln** (`starSparkle`) – dunkelblauer Hintergrund mit weißen „Sternen“
 
-Weitere Funktionen und mögliche neue Animationen stehen in **`parking.h`**. Das Projekt ist so angelegt, dass neue Animationen über eine einheitliche Schnittstelle (Richtung, Parameter) eingebunden werden können.
+An **Geburtstagen** (laut `birthdays.h`) läuft nur die **Geburtstags-Animation** (bunte Zufallsfarben, 50 % Helligkeit).
+
+Im Web unter **Animation (10 s)** können alle genannten plus **Nacht (Rot atmend)** für 10 Sekunden per „Go“ getestet werden.
+
+Weitere Funktionen und mögliche neue Animationen stehen in **`parking.h`**.
 
 ---
 
 ## Lizenz / Kontakt
 
-Ursprünglich ab Oktober 2016; Sketch und Struktur mehrfach erweitert (u. a. OTA, Credentials, Debug, Firewall-Workaround).
+Ursprünglich ab Oktober 2016; Sketch und Struktur mehrfach erweitert (u. a. OTA, Credentials, Web-API, Nachtmodus, Geburtstage, Firewall-Workaround).
 
 Bei Fragen oder Ideen für neue Animationen: Repository-Inhaber kontaktieren.
