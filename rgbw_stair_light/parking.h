@@ -1,5 +1,7 @@
 #include <ArduinoOTA.h>
 
+extern uint32_t g_animDurationOverrideMs;  // wenn >0: Laufzeit für Animation (z. B. 10000 = 10 s „Go“)
+
 // ===================================================================================
 // FUNCTION NAME
 // testPIRs
@@ -115,7 +117,7 @@ void fadeInSingleStep(int step_number, int fade_time_ms, int red, int green, int
       yield();
     }
     strip.show();
-    ArduinoOTA.handle();
+    handleNetwork();
     yield();
   }
   delay(10);
@@ -152,7 +154,7 @@ void fadeOutSingleStep(int step_number, int fade_time_ms, int red, int green, in
       yield();
     }
     strip.show();
-    ArduinoOTA.handle();
+    handleNetwork();
     yield();
   }
   delay(10);
@@ -169,61 +171,38 @@ void fadeOutSingleStep(int step_number, int fade_time_ms, int red, int green, in
 // -----------------------------------------------------------------------------------
 void FadeToFullBrightness(String dir){
   Serial.println("FadeFullBrightness");
-  int count = 0, i, val1, val2;
+  int i;
   unsigned long s_timer = millis();
-  unsigned long c_timer;
-  if (dir == "UP") { // are we moving up the stairs?
+  uint32_t limit = (g_animDurationOverrideMs != 0) ? g_animDurationOverrideMs : (uint32_t)ANIM_DURATION;
+  if (dir == "UP") {
     Serial.println("Moving up the stairs");
     for ( i = 1; i <= STEPS; i++ ) {
       fadeInSingleStep(i, 100, 255, 255, 255, 255);
     }
-    val2 = digitalRead(PIR2);
-    c_timer = millis();
-    // wait until either time elapsed or second PIR triggered
-    while ( ! ( val2 == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
-      ArduinoOTA.handle();
+    while ( millis() - s_timer < limit ) {
+      handleNetwork();
       delay(100);
-      val2 = digitalRead(PIR2);
       yield();
-      if (val2 == HIGH) {
-        Serial.println("We have reached the top of the stairs or time is up!");
-      }
-      c_timer = millis();
     }
-    // end animation
     for ( i = 1; i <= STEPS ; i++ ) {
       fadeOutSingleStep(i, 100, 255, 255, 255, 255);
     }
-    val2 = LOW;
-    delay(3000);
   } else if ( dir == "DOWN" ) {
     Serial.println("Moving down the stairs");
     s_timer = millis();
     for ( i = STEPS; i >= 1; i-- ) {
       fadeInSingleStep(i, 100, 255, 255, 255, 255);
     }
-    val1 = digitalRead(PIR1);
-    c_timer = millis();
-    // wait until either time elapsed or second PIR triggered
-    while ( ! ( val1 == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
-      ArduinoOTA.handle();
+    while ( millis() - s_timer < limit ) {
+      handleNetwork();
       delay(100);
-      val1 = digitalRead(PIR1);
       yield();
-      if (val1 == HIGH) {
-        Serial.println("We have reached the bottom of the stairs or time is up!");
-      }
-      c_timer = millis();
     }
-    // end animation
     for ( i = STEPS; i >= 1 ; i-- ) {
       fadeOutSingleStep(i, 100, 255, 255, 255, 255);
     }
-    val1 = LOW;
-    delay(3000);
   }
   yield();
-  delay(200);
 }
 // -----------------------------------------------------------------------------------
 
@@ -237,17 +216,16 @@ void FadeToFullBrightness(String dir){
 // -----------------------------------------------------------------------------------
 void starSparkle(String dir){
   Serial.println("starSparkle");
-  int count = 0, i, minStars = 10, maxStars = 20;
-  unsigned long s_timer =  millis();
-  unsigned long c_timer;
+  int i, minStars = 10, maxStars = 20;
+  unsigned long s_timer = millis();
+  uint32_t limit = (g_animDurationOverrideMs != 0) ? g_animDurationOverrideMs : (uint32_t)ANIM_DURATION;
   int blue = 120;
   int blue_gamma = gammaw[blue];
-  if (dir == "UP") { // We are moving up the stairs
+  if (dir == "UP") {
     Serial.println("Moving up the stairs");
     for ( i = 1; i <= STEPS; i++ ) { fadeInSingleStep(i, 75, 0, 0, blue, 0); }
-    c_timer = millis();
-    while ( ! ( digitalRead(PIR2) == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
-      ArduinoOTA.handle();
+    while ( millis() - s_timer < limit ) {
+      handleNetwork();
       for ( i = 1; i < random(minStars,maxStars); i++) {
         strip.setPixelColor(random(0,NUM_LEDS), 255, 255, 255, 255);
       }
@@ -255,17 +233,13 @@ void starSparkle(String dir){
       setAll(0, 0, blue_gamma,0);
       strip.show();
       yield();
-      if ( digitalRead(PIR2) == HIGH ) { Serial.println("We have reached the top of the stairs!"); }
-      c_timer = millis();
     }
     for ( i = 1; i <= STEPS ; i++ ) { fadeOutSingleStep(i, 75, 0, 0, blue, 0); }
-    delay(2500);    
-  } else if ( dir == "DOWN" ) {    
+  } else if ( dir == "DOWN" ) {
     Serial.println("Moving down the stairs");
     for ( i = STEPS; i >= 1; i-- ) { fadeInSingleStep(i, 75, 0, 0, blue, 0); }
-    c_timer = millis();
-    while ( ! ( digitalRead(PIR1) == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
-      ArduinoOTA.handle();
+    while ( millis() - s_timer < limit ) {
+      handleNetwork();
       for ( i = 1; i < random(minStars,maxStars); i++) {
         strip.setPixelColor(random(0, NUM_LEDS), 255, 255, 255, 255);
       }
@@ -273,14 +247,10 @@ void starSparkle(String dir){
       setAll(0, 0, blue_gamma, 0);
       strip.show();
       yield();
-      if ( digitalRead(PIR1) == HIGH) { Serial.println("We have reached the bottom of the stairs!"); }
-      c_timer = millis();
     }
     for ( i = STEPS; i >= 1 ; i-- ) { fadeOutSingleStep(i, 75, 0, 0, blue, 0); }
-    delay(2500);
   }
   yield();
-  delay(200);
 }
 // -----------------------------------------------------------------------------------
 
@@ -295,65 +265,42 @@ void starSparkle(String dir){
 // -----------------------------------------------------------------------------------
 void simpleFadeToRandom(String dir){
   Serial.println("SimpleFadeToRandom");
-  int count = 0, i, val1, val2;
+  int i;
   unsigned long s_timer = millis();
-  unsigned long c_timer;
+  uint32_t limit = (g_animDurationOverrideMs != 0) ? g_animDurationOverrideMs : (uint32_t)ANIM_DURATION;
   int red = random(256);
   int green = random(256);
   int blue = random(256);
   int white = random(256);
-  if (dir == "UP") { // are we moving up the stairs?
+  if (dir == "UP") {
     Serial.println("Moving up the stairs");
     for ( i = 1; i <= STEPS; i++ ) {
       fadeInSingleStep(i, 100, red, green, blue, white);
     }
-    val2 = digitalRead(PIR2);
-    c_timer = millis();
-    // wait until either time elapsed or second PIR triggered
-    while ( ! ( val2 == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
-      ArduinoOTA.handle();
+    while ( millis() - s_timer < limit ) {
+      handleNetwork();
       delay(100);
-      val2 = digitalRead(PIR2);
       yield();
-      if (val2 == HIGH) {
-        Serial.println("We have reached the top of the stairs or time is up!");
-      }
-      c_timer = millis();
     }
-    // end animation
     for ( i = 1; i <= STEPS ; i++ ) {
       fadeOutSingleStep(i, 100, red, green, blue, white);
     }
-    val2 = LOW;
-    delay(3000);
   } else if ( dir == "DOWN" ) {
     Serial.println("Moving down the stairs");
     s_timer = millis();
     for ( i = STEPS; i >= 1; i-- ) {
       fadeInSingleStep(i, 100, red, green, blue, white);
     }
-    val1 = digitalRead(PIR1);
-    c_timer = millis();
-    // wait until either time elapsed or second PIR triggered
-    while ( ! ( val1 == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
-      ArduinoOTA.handle();
+    while ( millis() - s_timer < limit ) {
+      handleNetwork();
       delay(100);
-      val1 = digitalRead(PIR1);
       yield();
-      if (val1 == HIGH) {
-        Serial.println("We have reached the bottom of the stairs or time is up!");
-      }
-      c_timer = millis();
     }
-    // end animation
     for ( i = STEPS; i >= 1 ; i-- ) {
       fadeOutSingleStep(i, 100, red, green, blue, white);
     }
-    val1 = LOW;
-    delay(3000);
   }
   yield();
-  delay(200);
 }
 
 
@@ -385,42 +332,51 @@ void setStep(int s, int c){
 void rainbowSteps(String dir){
   Serial.println("rainbowSteps");
   int i, j, k;
-  if (dir == "DOWN") { // are we moving down the stairs?
+  unsigned long s_timer;
+  bool timed_out;
+  uint32_t limit = (g_animDurationOverrideMs != 0) ? g_animDurationOverrideMs : (uint32_t)ANIM_DURATION;
+  if (dir == "DOWN") {
     Serial.println("Moving down the stairs");
     for (j=STEPS;j>=0;j--){
       fadeInSingleStep(j, 75, red(Wheel(int(((j-1)*255/STEPS)))), green(Wheel(int(((j-1)*255/STEPS)))), blue(Wheel(int(((j-1)*255/STEPS)))),0);
     }
-    
+    s_timer = millis();
+    timed_out = false;
     for (k=0;k<2;k++) {
       for (i=0;i<256;i=i+2){
+        if (millis() - s_timer > limit) { timed_out = true; break; }
+        handleNetwork();
         for (j=1;j<=STEPS;j++){
           setStep(j,Wheel(int(i + ((j-1) * 255 / STEPS))));
         }
         strip.show();
         yield();
       }
+      if (timed_out) break;
     }
     for (j=STEPS;j>=0;j--){
       fadeOutSingleStep(j, 30, red(Wheel(int(((j-1)*255/STEPS)))), green(Wheel(int(((j-1)*255/STEPS)))), blue(Wheel(int(((j-1)*255/STEPS)))),0);
     }
-
   } else if ( dir == "UP" ) {
     Serial.println("Moving up the stairs");
-
     for (j=1;j<=STEPS;j++){
       fadeInSingleStep(j, 75, red(Wheel(int(((j-1)*255/STEPS)))), green(Wheel(int(((j-1)*255/STEPS)))), blue(Wheel(int(((j-1)*255/STEPS)))),0);
     }
-        
+    s_timer = millis();
+    timed_out = false;
     for (k=0;k<2;k++) {
       for (i=256;i>0;i--){
+        if (millis() - s_timer > limit) { timed_out = true; break; }
+        handleNetwork();
         for (j=1;j<=STEPS;j++){
           setStep(j,Wheel(int(i + ((j-1) * 255 / STEPS))));
         }
         strip.show();
         yield();
       }
+      if (timed_out) break;
     }
-     for (j=1;j<=STEPS;j++){
+    for (j=1;j<=STEPS;j++){
       fadeOutSingleStep(j, 30, red(Wheel(int(((j-1)*255/STEPS)))), green(Wheel(int(((j-1)*255/STEPS)))), blue(Wheel(int(((j-1)*255/STEPS)))),0);
     }
   }
@@ -436,17 +392,14 @@ void rainbowSteps(String dir){
 void setStepRndm(int s, int c){
   int step_start = (s - 1) * WIDTH;
   int step_end = step_start + WIDTH;
-  int r, g, b, w;
   for(int i=step_start;i<step_end;i++){
-    r = random(200);
-    g = random(200);
-    b = random(200);
-    w = 0;
-    c = Wheel(random(255));
-    strip.setPixelColor(i, c);
+    uint32_t col = Wheel((byte)random(255));
+    uint8_t rv = (uint8_t)red(col) / 2;    // 50 % Helligkeit
+    uint8_t gv = (uint8_t)green(col) / 2;
+    uint8_t bv = (uint8_t)blue(col) / 2;
+    strip.setPixelColor(i, strip.Color(rv, gv, bv, 0));
     yield();
   }
-  // strip.show();
 }
 
 // ===================================================================================
@@ -459,10 +412,10 @@ void setStepRndm(int s, int c){
 void birthday(String dir) {
   unsigned long s_timer = millis();
   unsigned long c_timer = millis();
+  uint32_t limit = (g_animDurationOverrideMs != 0) ? g_animDurationOverrideMs : (uint32_t)ANIM_DURATION;
   int s;
-  while ( c_timer - s_timer < ANIM_DURATION ) {
-  // while ( c_timer - s_timer < 15000 ) {
-    ArduinoOTA.handle();
+  while ( (unsigned long)(c_timer - s_timer) < limit ) {
+    handleNetwork();
     for (s=1;s<=STEPS;s++) {
       setStepRndm(s, 1);
       c_timer = millis();

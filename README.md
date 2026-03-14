@@ -27,6 +27,7 @@ Automatische, animierte Treppenbeleuchtung mit **SK6812 RGBW**-LEDs. Zwei PIR-Se
 |--------------|--------------|
 | `rgbw_stair_light/` | Haupt-Sketch (Treppenlicht + OTA) |
 | `rgbw_stair_light/parking.h` | Animationen und Hilfsfunktionen |
+| `rgbw_stair_light/birthdays.h.example` | Vorlage für Geburtstage (kopieren nach `birthdays.h`) |
 | `minimal_ota/` | Minimal-Sketch nur WiFi + OTA (zum Testen) |
 | `RGBWstrandtest/` | Separater LED-Strip-Test (ohne PIR) |
 | `schematics/` | KiCad-Schaltplan, PCB |
@@ -58,11 +59,19 @@ Die Zugangsdaten liegen in **`rgbw_stair_light/credentials.h`** (wird von Git ig
 
 Ohne `credentials.h` bricht der Build ab. Für den Minimal-Sketch: `minimal_ota/credentials.h` anlegen (oder aus `rgbw_stair_light/` kopieren).
 
-### 2. Firewall (macOS, nur bei OTA-Problemen)
+### 2. Geburtstage (optional)
+
+An Tagen, die in **`rgbw_stair_light/birthdays.h`** eingetragen sind, läuft nur die Geburtstags-Animation.
+
+- **`birthdays.h`** liegt in der `.gitignore` und wird nicht ins Repo committed.
+- Vorlage: `birthdays.h.example` nach `birthdays.h` kopieren, `BIRTHDAY_COUNT` und die Liste `BIRTHDAY(Monat, Tag)` anpassen (z. B. `BIRTHDAY(3, 15)` = 15. März).
+- Ohne `birthdays.h` bricht der Build ab – also nach dem Klonen die Example-Datei kopieren (bei Bedarf mit 0 Einträgen).
+
+### 3. Firewall (macOS, nur bei OTA-Problemen)
 
 Wenn OTA mit aktiver Firewall fehlschlägt:
 
-- **Variante A – Regel per CLI:**  
+- **Variante A – Regel per CLI:**    
   `sudo ./setup-firewall-ota.sh`  
   (erlaubt Arduino-Python und Terminal/Cursor eingehende Verbindungen)
 
@@ -107,7 +116,9 @@ Voraussetzung: Der ESP läuft bereits mit einer Firmware, die **ArduinoOTA** nut
   ./upload-to-esp8266-ota.sh 192.168.2.185
   ```
 
-Die IP erscheint im Serial Monitor nach „Connected, IP address:“ oder „OTA bereit. Upload von PC: …“.
+Die IP erscheint im Serial Monitor nach „Connected, IP address:“ bzw. „Web-Server: http://…“.
+
+**Web-Steuerung:** Im Browser `http://<IP>` oder `http://<OTA_HOSTNAME>.local` öffnen. Dort: Treppenautomatik An/Aus, pro Farbe (Rot/Grün/Blau/Weiss) Helligkeit −10 % / An-Aus / +10 %, sowie „Alle LEDs aus“.
 
 **Wenn die Firewall (macOS) OTA blockiert:**  
 Statt `upload-to-esp8266-ota.sh` das Wrapper-Skript nutzen:
