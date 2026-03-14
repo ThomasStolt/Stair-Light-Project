@@ -9,6 +9,11 @@ Automatic animated stair lighting with **SK6812 RGBW** LEDs. Two PIR sensors (SR
 
 ![Stair Light test bed](images/stairlight-neopixel.gif)
 
+<div align="center">
+  <img src="images/stairlight-neopixel.gif" alt="Stair Light test bed" width="480">
+</div>
+
+
 ---
 
 ## Requirements
