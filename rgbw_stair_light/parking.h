@@ -1,3 +1,5 @@
+#include <ArduinoOTA.h>
+
 // ===================================================================================
 // FUNCTION NAME
 // testPIRs
@@ -113,6 +115,7 @@ void fadeInSingleStep(int step_number, int fade_time_ms, int red, int green, int
       yield();
     }
     strip.show();
+    ArduinoOTA.handle();
     yield();
   }
   delay(10);
@@ -149,6 +152,7 @@ void fadeOutSingleStep(int step_number, int fade_time_ms, int red, int green, in
       yield();
     }
     strip.show();
+    ArduinoOTA.handle();
     yield();
   }
   delay(10);
@@ -177,6 +181,7 @@ void FadeToFullBrightness(String dir){
     c_timer = millis();
     // wait until either time elapsed or second PIR triggered
     while ( ! ( val2 == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
+      ArduinoOTA.handle();
       delay(100);
       val2 = digitalRead(PIR2);
       yield();
@@ -201,6 +206,7 @@ void FadeToFullBrightness(String dir){
     c_timer = millis();
     // wait until either time elapsed or second PIR triggered
     while ( ! ( val1 == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
+      ArduinoOTA.handle();
       delay(100);
       val1 = digitalRead(PIR1);
       yield();
@@ -241,6 +247,7 @@ void starSparkle(String dir){
     for ( i = 1; i <= STEPS; i++ ) { fadeInSingleStep(i, 75, 0, 0, blue, 0); }
     c_timer = millis();
     while ( ! ( digitalRead(PIR2) == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
+      ArduinoOTA.handle();
       for ( i = 1; i < random(minStars,maxStars); i++) {
         strip.setPixelColor(random(0,NUM_LEDS), 255, 255, 255, 255);
       }
@@ -258,6 +265,7 @@ void starSparkle(String dir){
     for ( i = STEPS; i >= 1; i-- ) { fadeInSingleStep(i, 75, 0, 0, blue, 0); }
     c_timer = millis();
     while ( ! ( digitalRead(PIR1) == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
+      ArduinoOTA.handle();
       for ( i = 1; i < random(minStars,maxStars); i++) {
         strip.setPixelColor(random(0, NUM_LEDS), 255, 255, 255, 255);
       }
@@ -303,6 +311,7 @@ void simpleFadeToRandom(String dir){
     c_timer = millis();
     // wait until either time elapsed or second PIR triggered
     while ( ! ( val2 == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
+      ArduinoOTA.handle();
       delay(100);
       val2 = digitalRead(PIR2);
       yield();
@@ -327,6 +336,7 @@ void simpleFadeToRandom(String dir){
     c_timer = millis();
     // wait until either time elapsed or second PIR triggered
     while ( ! ( val1 == HIGH || ( c_timer - s_timer > ANIM_DURATION ) ) )   {
+      ArduinoOTA.handle();
       delay(100);
       val1 = digitalRead(PIR1);
       yield();
@@ -452,6 +462,7 @@ void birthday(String dir) {
   int s;
   while ( c_timer - s_timer < ANIM_DURATION ) {
   // while ( c_timer - s_timer < 15000 ) {
+    ArduinoOTA.handle();
     for (s=1;s<=STEPS;s++) {
       setStepRndm(s, 1);
       c_timer = millis();

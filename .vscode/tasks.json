@@ -1,0 +1,88 @@
+{
+  "version": "2.0.0",
+  "options": {
+    "cwd": "${workspaceFolder}"
+  },
+  "inputs": [
+    {
+      "id": "uploadPort",
+      "type": "promptString",
+      "description": "Serial-Port des ESP8266 (z.B. /dev/cu.usbserial-0001). Liste mit: arduino-cli board list",
+      "default": "/dev/cu.usbserial-0001"
+    }
+  ],
+  "tasks": [
+    {
+      "label": "Arduino: Compile (ESP8266 NodeMCU)",
+      "type": "shell",
+      "command": "arduino-cli",
+      "args": [
+        "compile",
+        "--fqbn", "esp8266:esp8266:nodemcu",
+        "${workspaceFolder}/rgbw_stair_light"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Arduino: Upload (ESP8266 NodeMCU)",
+      "type": "shell",
+      "command": "arduino-cli",
+      "args": [
+        "upload",
+        "-p", "${input:uploadPort}",
+        "--fqbn", "esp8266:esp8266:nodemcu",
+        "${workspaceFolder}/rgbw_stair_light"
+      ],
+      "dependsOn": "Arduino: Compile (ESP8266 NodeMCU)",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Arduino: Boards anzeigen (Port für Upload finden)",
+      "type": "shell",
+      "command": "arduino-cli",
+      "args": ["board", "list"],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "Arduino: Nur Upload (ohne vorher Compile)",
+      "type": "shell",
+      "command": "arduino-cli",
+      "args": [
+        "upload",
+        "-p", "${input:uploadPort}",
+        "--fqbn", "esp8266:esp8266:nodemcu",
+        "${workspaceFolder}/rgbw_stair_light"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Serial Monitor (115200 Baud)",
+      "type": "shell",
+      "command": "arduino-cli",
+      "args": [
+        "monitor",
+        "-p", "${input:uploadPort}",
+        "-c", "baudrate=115200"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true
+      }
+    }
+  ]
+}

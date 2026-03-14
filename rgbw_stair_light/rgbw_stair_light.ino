@@ -28,13 +28,13 @@
 #include <Adafruit_NeoPixel.h>
 #include <time.h>
 #include <ESP8266WiFi.h>
-#include <WiFiClient.h>  // do we need this?
+#include <WiFiClient.h>
 #include <ESP8266WiFiMulti.h>
-#include <ESP8266HTTPClient.h>
-#include <ESP8266httpUpdate.h>
+#include <ESP8266mDNS.h>
+#include <ArduinoOTA.h>
 #include <EasyNTPClient.h>
 #include <WiFiUdp.h>
-// #include <credentials.h>
+#include "credentials.h"
 #include <Ticker.h>
 
 #ifdef __AVR__
@@ -57,9 +57,7 @@
 // that is because there are only a few (10) levels of brighness for each color, so this is normal
 #define BRIGHTNESS 255            // limit brightness of the strip
 #define USE_SERIAL Serial
-#define OTA_SERVER "http://192.168.2.7"
-
-
+#define DEBUG 1   // 1 = Serieller Monitor zeigt PIR-Zustand und Trigger
 
 ESP8266WiFiMulti WiFiMulti;
 
@@ -112,6 +110,12 @@ void setup() {
   USE_SERIAL.println();
   USE_SERIAL.println();
 
+  // LEDs sofort ausschalten (bevor WiFi/OTA – sonst Strip-Zustand unbestimmt)
+  strip.setBrightness(BRIGHTNESS);
+  strip.begin();
+  setAll(0, 0, 0, 0);
+  strip.show();
+
   // secondTick.attach(1,ISRwatchdog);
 
 
@@ -122,26 +126,23 @@ void setup() {
   }
 
   // ========================================================================================
-  // Setting up WiFi. I am using mySSID and myPass here. On my system, they are defined in a
-  // header file named credentials.h (see include statemend above), which I have located at:
-  // ~/.arduino15/packages/esp8266/hardware/esp8266/2.4.1/libaries/credentials/
-  // It contains only two lines:
-  // char mySSID[] = "ssid";
-  // char myPass[] = "pass";
-  // This is only here to hide my own credentials from Github. You can also just put your own
-  // credentials directly into the WifFi.begin("YourWiFi","YourWiFiPass") function.
+  // WiFi: SSID und Passwort aus .credentials (steht in .gitignore).
   // ========================================================================================
-  // WiFi.begin(mySSID, myPass);
-  WiFi.begin("", "");
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
   Serial.print("Connecting");
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    delay(1000);
-    Serial.print(".:");
+  const unsigned long wifiTimeout = 10000;  // 10 s, danach ohne WiFi weitermachen (Testbed)
+  unsigned long wifiStart = millis();
+  while (WiFi.status() != WL_CONNECTED && (millis() - wifiStart) < wifiTimeout) {
+    delay(500);
+    Serial.print(".");
   }
   Serial.println();
-  Serial.print("Connected, IP address: ");
-  Serial.println(WiFi.localIP());
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("Connected, IP address: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println("Kein WiFi (Timeout). Fahre ohne Netzwerk fort – PIR/LED funktionieren.");
+  }
   // print MAC address, uncomment if needed
   // byte mac[6];
   // WiFi.macAddress(mac);
@@ -155,65 +156,98 @@ void setup() {
   // ========================================================================================
 
   
-  // =======================================================================================
-  // Don't even touch this, it took me weeks to get this working. I am not sure why, but it
-  // does work now.
-  // Getting updates OTA
-  // I am thinking of making this a function and calling it at first boot (e.g. if the reset
-  // button is pressed) or through an MQTT message from a broker. But it is not that urgent.
-  // =======================================================================================
-  if((WiFi.status() == WL_CONNECTED)) {
-    // t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/iotappstoryv20.php");
-    t_httpUpdate_return ret = ESPhttpUpdate.update("http://192.168.2.7/bin/rgbw_stair_light");
-      switch(ret) {
-        case HTTP_UPDATE_FAILED:
-          USE_SERIAL.printf("HTTP_UPDATE_FAILD Error (%d): %s", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
-        break;
-        case HTTP_UPDATE_NO_UPDATES:
-          USE_SERIAL.println("HTTP_UPDATE_NO_UPDATES");
-        break;
-        case HTTP_UPDATE_OK:
-          USE_SERIAL.println("HTTP_UPDATE_OK");
-        break;
-      }
-    }
-  // =======================================================================================
-  // =======================================================================================
-  // =======================================================================================
-  
-  strip.setBrightness(BRIGHTNESS);
-  strip.begin(); // prepare the data pin for NeoPixel output
-  setAll(0,0,0,0);
-  strip.show(); // Initialize all pixels to 'off'
+  // OTA: Du pushst neue Firmware von Cursor/PC aus (arduino-cli upload -p <ESP-IP>).
+  // ESP holt nichts selbst von einem Server.
+  if (WiFi.status() == WL_CONNECTED) {
+    ArduinoOTA.setHostname(OTA_HOSTNAME);
+    ArduinoOTA.onStart([]() {
+      Serial.printf("OTA Start – freier Heap: %u Byte\n", ESP.getFreeHeap());
+    });
+    ArduinoOTA.onEnd([]() {
+      Serial.println("\nOTA Ende – warte 2 s vor Neustart (damit OK an PC geht).");
+      delay(2000);  // Verhindert Timeout in espota: ESP muss OK senden, bevor er neu startet
+    });
+    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+      Serial.printf("OTA Fortschritt: %u%%\r", (progress / (total / 100)));
+    });
+    ArduinoOTA.onError([](ota_error_t error) {
+      Serial.printf("OTA Fehler[%u]: ", error);
+      if (error == OTA_AUTH_ERROR) Serial.println("Auth");
+      else if (error == OTA_BEGIN_ERROR) Serial.println("Begin");
+      else if (error == OTA_CONNECT_ERROR) Serial.println("Connect");
+      else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive");
+      else if (error == OTA_END_ERROR) Serial.println("End");
+    });
+    ArduinoOTA.begin();
+#if DEBUG
+    Serial.println("OTA bereit. Upload von PC: arduino-cli upload -p " + WiFi.localIP().toString() + " ...");
+#endif
+  }
+
+  // Strip bereits am Anfang initialisiert; hier nur sicherstellen, dass aus
+  setAll(0, 0, 0, 0);
+  strip.show();
 
   // initialise the random generator
   randomSeed(ESP.getCycleCount());
   
   pinMode(PIR1, INPUT);
   pinMode(PIR2, INPUT);
-  
+
+#if DEBUG
+  Serial.println();
+  Serial.println("=== Setup fertig ===");
+  Serial.println("LEDs aus. PIR1 = D0/GPIO16 (oben), PIR2 = D2/GPIO4 (unten).");
+  Serial.println("Warte auf Bewegung... (PIR=HIGH = ausgelöst)");
+  Serial.println("================================");
+#endif
 }
   
 void loop() {
   Serial.println("");
-  int count = 0;   // some nicer debug output, is it still working
-  String dir = ""; // to tell, which direction someone is walking the stairs
-  int currenttime;
+  int count = 0;
+  String dir = "";
+  int currenttime = 0;
+  int lastPir1 = -1, lastPir2 = -1;  // für Debug: Änderung erkennen
+  static int lastAnimation = 0;      // 0 = noch keine, 1–4 = letzte gewählte Animation (keine Doppel)
   while (true) {
+    ArduinoOTA.handle();
     watchdogCount = 0;
-    // figure out first, which IR sensor has been triggered
-    if ( digitalRead(PIR1) == HIGH ) { dir = "UP"; }
-    if ( digitalRead(PIR2) == HIGH ) { dir = "DOWN"; }
-    // if one of them has been triggered, choose a random animation function to go to
-    if ( dir != "" ) {
-      // J's Birthday
-      // if ( currenttime > 1531778400 && currenttime < 1531864799 ) {
-      // M's Birthday
-      if ( currenttime > 1537903800 && currenttime < 1537999199 ) {
+    int pir1 = digitalRead(PIR1);
+    int pir2 = digitalRead(PIR2);
+
+#if DEBUG
+    // Alle ~2 s: PIR-Zustand ausgeben (Heartbeat)
+    if (count % 20 == 0) {
+      Serial.printf("[%lu] PIR1=%s PIR2=%s  (PIR1=UP, PIR2=DOWN)\n",
+                    millis() / 1000, pir1 == HIGH ? "HIGH" : "low ", pir2 == HIGH ? "HIGH" : "low ");
+    }
+    // Bei Zustandsänderung sofort melden
+    if (pir1 != lastPir1 || pir2 != lastPir2) {
+      Serial.printf("      PIR geändert -> PIR1=%s PIR2=%s\n", pir1 == HIGH ? "HIGH" : "low ", pir2 == HIGH ? "HIGH" : "low ");
+      lastPir1 = pir1;
+      lastPir2 = pir2;
+    }
+#endif
+
+    if (pir1 == HIGH) { dir = "UP"; }
+    if (pir2 == HIGH) { dir = "DOWN"; }
+
+    if (dir != "") {
+#if DEBUG
+      Serial.println(">>> PIR ausgelöst: " + dir + " -> starte Animation");
+#endif
+      if (currenttime > 1537903800 && currenttime < 1537999199) {
         birthday(dir);
       } else {
-        switch (random(1,5)) {
-        // switch (5) { // for testing purposes
+        // Zufall 1–4, aber nicht dieselbe Animation wie beim letzten Mal
+        int choice;
+        do {
+          choice = random(1, 5);
+        } while (choice == lastAnimation);
+        lastAnimation = choice;
+
+        switch (choice) {
           case 1:
             simpleFadeToRandom(dir);
             break;
@@ -230,14 +264,12 @@ void loop() {
       }
     }
     dir = "";
-    Serial.print(".");
-    // Serial.println(currenttime);
-    if ( count++ > 100 ) {
-      Serial.println("");
-      
+
+    if (count++ > 100) {
       currenttime = ntpClient.getUnixTime();
-      
-      Serial.println(currenttime);
+#if DEBUG
+      Serial.printf("NTP Zeit: %d\n", currenttime);
+#endif
       count = 0;
     }
     yield();
