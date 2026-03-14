@@ -7,7 +7,7 @@ Automatic animated stair lighting with **SK6812 RGBW** LEDs. Two PIR sensors (SR
 - **Sensors:** PIR1 = “up”, PIR2 = “down”
 - **Boot:** Stair automation is **off** after boot; 3× green blink indicates “ready”.
 
-![Stair Light test bed](images/IMG_1958.jpg)
+![Stair Light test bed](images/stairlight-neopixel.gif)
 
 ---
 
