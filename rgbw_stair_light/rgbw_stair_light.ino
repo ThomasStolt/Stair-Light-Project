@@ -67,11 +67,30 @@ ESP8266WiFiMulti WiFiMulti;
 ESP8266WebServer server(80);
 
 // Web control: stair automation and manual colour (0–100% per channel)
-bool automationOn = false;  // Start: automation off (can be turned on via web)
+bool automationOn = true;   // Start: automation on (can be turned off via web)
 uint8_t manual_r = 0, manual_g = 0, manual_b = 0, manual_w = 0;  // 0–100 %
 
 // If > 0: animations (e.g. web "Go") run only for this duration (ms), else ANIM_DURATION
 uint32_t g_animDurationOverrideMs = 0;
+
+// Last NTP time (UTC) from main loop; used by /api/time for Web UI date/time display
+volatile long g_lastNtpTime = 0;
+
+// Last 5 motion events (direction + animation) for Web UI log
+#define MOTION_LOG_SIZE 5
+struct MotionLogEntry { char dir[6]; uint8_t anim_id; long timestamp; };
+MotionLogEntry motionLog[MOTION_LOG_SIZE];
+uint8_t motionLogHead = 0;
+uint8_t motionLogCount = 0;
+
+void addMotionLog(const char* dir, uint8_t anim_id) {
+  strncpy(motionLog[motionLogHead].dir, dir, 5);
+  motionLog[motionLogHead].dir[5] = '\0';
+  motionLog[motionLogHead].anim_id = anim_id;
+  motionLog[motionLogHead].timestamp = g_lastNtpTime;
+  motionLogHead = (motionLogHead + 1) % MOTION_LOG_SIZE;
+  if (motionLogCount < MOTION_LOG_SIZE) motionLogCount++;
+}
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEOPIXEL_PIN, NEO_GRBW + NEO_KHZ800);
 
@@ -149,10 +168,12 @@ void handleIndex() {
     ".row{display:flex;align-items:center;justify-content:center;gap:0.4rem;margin:0.5rem 0;flex-wrap:nowrap;overflow-x:auto;padding:2px 0;}"
     "button.btn{padding:0.9rem 1.2rem;margin:2px;border-radius:10px;font-size:1.1rem;cursor:pointer;border:none;min-height:2.6em;flex-shrink:0;}"
     ".minus{background:#2a3a4a;color:#8cf;} .plus{background:#2a3a4a;color:#8cf;} .onoff{background:#444;color:#fff;}"
-    ".alloff{background:#a00;color:#fff;margin-top:1rem;} .auto{background:#2a4a2a;color:#9f9;} .auto.off{background:#4a2a2a;color:#f99;}"
+    ".auto{background:#2a4a2a;color:#9f9;} .auto.off{background:#4a2a2a;color:#f99;} .pctbtn{background:#2a3a4a;color:#8cf;}"
     "span.pct{display:inline-block;min-width:2.2em;text-align:left;} .led{width:14px;height:14px;border-radius:50%;display:inline-block;margin-right:0.35rem;box-shadow:0 0 6px currentColor;}"
     ".led-r{background:#e00;} .led-g{background:#0a0;} .led-b{background:#06f;} .led-w{background:#eee;}"
+    "table{width:100%;border-collapse:collapse;font-size:0.85rem;margin-top:0.3rem;} th,td{border:1px solid #444;padding:0.25rem 0.4rem;text-align:left;} th{background:#333;}"
     "</style></head><body><main><h1>Stair Light</h1>"
+    "<p style=margin-bottom:0.5rem;font-size:0.95rem;><span id=dateDisplay>--</span> <span id=timeDisplay>--</span></p>"
     "<p style=margin-bottom:1rem;><b>Stair automation</b><br>"
     "<button type=button class=\"btn auto\" id=autoOn>On</button> <button type=button class=\"btn auto off\" id=autoOff>Off</button> &rarr; <b id=autoStatus>–</b></p>"
     "<div class=row><span class=\"led led-r\"></span><button type=button class=\"btn minus\" data-c=r data-a=minus>−10%</button>"
@@ -163,28 +184,44 @@ void handleIndex() {
     "<button type=button class=\"btn onoff\" id=togB>Off</button><button type=button class=\"btn plus\" data-c=b data-a=plus>+10%</button><span id=pctB class=pct>0%</span></div>"
     "<div class=row><span class=\"led led-w\"></span><button type=button class=\"btn minus\" data-c=w data-a=minus>−10%</button>"
     "<button type=button class=\"btn onoff\" id=togW>Off</button><button type=button class=\"btn plus\" data-c=w data-a=plus>+10%</button><span id=pctW class=pct>0%</span></div>"
-    "<p><button type=button class=\"btn alloff\" id=alloff>All LEDs off</button></p>"
+    "<p style=margin-top:0.8rem;margin-bottom:0.3rem;><b>All</b></p>"
+    "<div class=row style=align-items:center;><button type=button class=\"btn minus allpct\" data-all=0>0%</button>"
+    "<button type=button class=\"btn pctbtn allpct\" data-all=25>25%</button><button type=button class=\"btn pctbtn allpct\" data-all=50>50%</button>"
+    "<button type=button class=\"btn pctbtn allpct\" data-all=75>75%</button><button type=button class=\"btn plus allpct\" data-all=100>100%</button></div>"
+    "<p style=margin-top:0.8rem;><button type=button class=\"btn\" id=rebootBtn style=background:#663300;color:#ffc;>Reboot</button></p>"
+    "<p style=margin-top:1rem;><b>Last 5 motions</b></p>"
+    "<table><thead><tr><th>Time</th><th>Direction</th><th>Animation</th></tr></thead><tbody id=motionLogBody></tbody></table>"
+    "<p style=margin-top:1rem;><b>Memory status</b></p>"
+    "<table><thead><tr><th>Type</th><th>Total</th><th>Used</th><th>Usage</th></tr></thead><tbody id=memoryBody></tbody></table>"
     "<p style=margin-top:1rem;><b>Animation (10 s)</b><br>"
     "<select id=animSelect style=padding:0.4rem;background:#333;color:#eee;border-radius:6px;margin-right:0.5rem;>"
     "<option value=1>Random fade</option><option value=2>Rainbow</option><option value=3>White ramp</option>"
     "<option value=4>Star sparkle</option><option value=5>Birthday</option><option value=6>Night (red breathing)</option></select>"
     "<button type=button class=btn id=playAnim style=background:#2a5a2a;color:#9f9;>Go</button></p></main><script>"
-    "function load(){ fetch('/api/state').then(function(r){return r.json();}).then(function(d){"
+    "function load(){"
+    "Promise.all([fetch('/api/state').then(function(r){return r.json();}), fetch('/api/time').then(function(r){return r.json();}), fetch('/api/log').then(function(r){return r.json();}), fetch('/api/memory').then(function(r){return r.json();})]).then(function(arr){"
+    "var d=arr[0], t=arr[1], log=arr[2], mem=arr[3];"
     "document.getElementById('autoStatus').textContent=d.auto? 'On':'Off';"
     "var ch=['r','g','b','w'], id=['pctR','pctG','pctB','pctW'], tog=['togR','togG','togB','togW'];"
     "for(var i=0;i<4;i++){ document.getElementById(id[i]).textContent=d[ch[i]]+'%'; document.getElementById(tog[i]).textContent=d[ch[i]]>0?'On':'Off'; }"
+    "document.getElementById('dateDisplay').textContent=t.date||'--'; document.getElementById('timeDisplay').textContent=t.time||'--';"
+    "var tb=document.getElementById('motionLogBody'); tb.innerHTML=''; for(var i=0;i<log.length;i++){ var r=document.createElement('tr'); r.innerHTML='<td>'+log[i].time+'</td><td>'+log[i].dir+'</td><td>'+log[i].anim+'</td>'; tb.appendChild(r); }"
+    "function fmt(n){ return n>=1024 ? (n/1024).toFixed(1)+' KB' : n+' B'; }"
+    "var mb=document.getElementById('memoryBody'); mb.innerHTML='<tr><td>Heap (RAM)</td><td>'+fmt(mem.heap_total)+'</td><td>'+fmt(mem.heap_used)+'</td><td>'+mem.heap_pct+'%</td></tr><tr><td>Flash</td><td>'+fmt(mem.flash_size)+'</td><td>'+fmt(mem.flash_used)+'</td><td>'+mem.flash_pct+'%</td></tr><tr><td>RTC</td><td>'+fmt(mem.rtc_total)+'</td><td>'+fmt(mem.rtc_used)+'</td><td>'+mem.rtc_pct+'%</td></tr>';"
     "});}"
     "function post(url,body){ return fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body||''}).then(load);}"
     "document.getElementById('autoOn').onclick=function(){ post('/api/auto','on=1'); };"
     "document.getElementById('autoOff').onclick=function(){ post('/api/auto','on=0'); };"
-    "document.getElementById('alloff').onclick=function(){ post('/api/alloff'); };"
+    "document.querySelectorAll('.allpct').forEach(function(btn){ btn.onclick=function(){ post('/api/color','all='+btn.getAttribute('data-all')); }; });"
     "['minus','plus'].forEach(function(a){ var bt=document.querySelectorAll('[data-a='+a+']');"
     "for(var i=0;i<bt.length;i++){ (function(act,btn){ btn.onclick=function(){ var c=btn.getAttribute('data-c'); post('/api/color','c='+c+'&a='+act); }; })(a,bt[i]); }"
     "});"
     "['togR','togG','togB','togW'].forEach(function(id){ var c=id.replace('tog','').toLowerCase();"
     "document.getElementById(id).onclick=function(){ post('/api/color','c='+c+'&a=toggle'); }; });"
     "document.getElementById('playAnim').onclick=function(){ var v=document.getElementById('animSelect').value; post('/api/play','anim='+v); };"
-    "load();</script></body></html>"
+    "document.getElementById('rebootBtn').onclick=function(){ this.disabled=true; this.textContent='Rebooting...'; post('/api/reboot').then(function(){ setTimeout(function(){ location.reload(); }, 4000); }); };"
+    "load(); setInterval(load, 1000);"
+    "</script></body></html>"
   ));
 }
 
@@ -212,6 +249,29 @@ void handleApiAuto() {
 
 void handleApiColor() {
   if (server.method() != HTTP_POST) { server.send(405, F("text/plain"), F("Method Not Allowed")); return; }
+  // Set or adjust all channels (0–100): all=<value> or all=1&a=minus10|minus1|plus1|plus10
+  if (server.hasArg(F("all"))) {
+    int pct;
+    if (server.hasArg(F("a"))) {
+      String ax = server.arg(F("a"));
+      int cur = (int)manual_r;
+      if (ax == F("minus10")) pct = cur - 10;
+      else if (ax == F("minus1")) pct = cur - 1;
+      else if (ax == F("plus1")) pct = cur + 1;
+      else if (ax == F("plus10")) pct = cur + 10;
+      else { server.send(400, F("text/plain"), F("a=minus10|minus1|plus1|plus10")); return; }
+      if (pct < 0) pct = 0;
+      if (pct > 100) pct = 100;
+    } else {
+      pct = server.arg(F("all")).toInt();
+      if (pct < 0) pct = 0;
+      if (pct > 100) pct = 100;
+    }
+    manual_r = manual_g = manual_b = manual_w = (uint8_t)pct;
+    if (!automationOn) applyManualColor();
+    server.send(204);
+    return;
+  }
   if (!server.hasArg(F("c")) || !server.hasArg(F("a"))) { server.send(400, F("text/plain"), F("c and a required")); return; }
   String c = server.arg(F("c"));
   String a = server.arg(F("a"));
@@ -261,6 +321,118 @@ void handleApiPlay() {
   else if (anim == 5) birthday(F("UP"));
   g_animDurationOverrideMs = 0;
   server.send(204);
+}
+
+// GET /api/time – JSON with date and time (local, from NTP) for Web UI
+void handleApiTime() {
+  server.sendHeader(F("Cache-Control"), F("no-store"));
+  String json = "{\"date\":\"";
+  if (g_lastNtpTime <= 0) {
+    json += "--\",\"time\":\"--\"}";
+  } else {
+    time_t t = (time_t)(g_lastNtpTime + TIMEZONE_OFFSET_SEC);
+    struct tm *tm = gmtime(&t);
+    if (!tm) {
+      json += "--\",\"time\":\"--\"}";
+    } else {
+      char buf[16];
+      snprintf(buf, sizeof(buf), "%04d-%02d-%02d", tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday);
+      json += buf;
+      json += "\",\"time\":\"";
+      snprintf(buf, sizeof(buf), "%02d:%02d:%02d", tm->tm_hour, tm->tm_min, tm->tm_sec);
+      json += buf;
+      json += "\"}";
+    }
+  }
+  server.send(200, F("application/json"), json);
+}
+
+// POST /api/reboot – reboot ESP (send 204 then restart after short delay)
+void handleApiReboot() {
+  if (server.method() != HTTP_POST) { server.send(405, F("text/plain"), F("Method Not Allowed")); return; }
+  server.send(204);
+  server.handleClient();
+  delay(300);
+  ESP.restart();
+}
+
+// GET /api/log – JSON array of last 5 motions: { dir, anim, time } (newest first)
+void handleApiLog() {
+  server.sendHeader(F("Cache-Control"), F("no-store"));
+  String json = "[";
+  const char* animNames[] = { "", "Random fade", "Rainbow", "White ramp", "Star sparkle", "Birthday" };
+  for (uint8_t i = 0; i < motionLogCount; i++) {
+    int idx = (motionLogHead - 1 - i + MOTION_LOG_SIZE) % MOTION_LOG_SIZE;
+    if (i > 0) json += ",";
+    json += "{\"dir\":\""; json += motionLog[idx].dir;
+    json += "\",\"anim\":\""; json += (motionLog[idx].anim_id <= 5) ? animNames[motionLog[idx].anim_id] : "";
+    json += "\",\"time\":\"";
+    if (motionLog[idx].timestamp <= 0) {
+      json += "--:--";
+    } else {
+      time_t t = (time_t)(motionLog[idx].timestamp + TIMEZONE_OFFSET_SEC);
+      struct tm *tm = gmtime(&t);
+      if (tm) {
+        char buf[8];
+        snprintf(buf, sizeof(buf), "%02d:%02d", tm->tm_hour, tm->tm_min);
+        json += buf;
+      } else json += "--:--";
+    }
+    json += "\"}";
+  }
+  json += "]";
+  server.send(200, F("application/json"), json);
+}
+
+// GET /api/memory – JSON with heap/flash stats (total, used, %) for Web UI status table
+#ifndef ESP8266_HEAP_TOTAL
+#define ESP8266_HEAP_TOTAL 80192u  // typical user heap on NodeMCU/ESP-12
+#endif
+void handleApiMemory() {
+  server.sendHeader(F("Cache-Control"), F("no-store"));
+  uint32_t heapFree = ESP.getFreeHeap();
+  uint32_t heapTotal = ESP8266_HEAP_TOTAL;
+  uint32_t heapUsed = (heapTotal > heapFree) ? (heapTotal - heapFree) : 0;
+  uint32_t heapPct = (heapTotal > 0) ? (heapUsed * 100 / heapTotal) : 0;
+  uint8_t heapFrag = ESP.getHeapFragmentation();
+  uint32_t heapMaxBlock = ESP.getMaxFreeBlockSize();
+  uint32_t sketchSize = ESP.getSketchSize();
+  uint32_t sketchFree = ESP.getFreeSketchSpace();
+  uint32_t flashSize = ESP.getFlashChipSize();
+  uint32_t flashUsed = sketchSize;
+  uint32_t flashPct = (flashSize > 0) ? (flashUsed * 100 / flashSize) : 0;
+  // RTC: 768 bytes total on ESP8266 (persists in deep sleep); no API for used, report 0 if unused
+  const uint32_t rtcTotal = 768u;
+  uint32_t rtcUsed = 0;
+  uint32_t rtcPct = 0;
+  String json = "{\"heap_total\":";
+  json += heapTotal;
+  json += ",\"heap_used\":";
+  json += heapUsed;
+  json += ",\"heap_pct\":";
+  json += heapPct;
+  json += ",\"heap_free\":";
+  json += heapFree;
+  json += ",\"heap_frag\":";
+  json += heapFrag;
+  json += ",\"heap_max_block\":";
+  json += heapMaxBlock;
+  json += ",\"flash_size\":";
+  json += flashSize;
+  json += ",\"flash_used\":";
+  json += flashUsed;
+  json += ",\"flash_pct\":";
+  json += flashPct;
+  json += ",\"rtc_total\":";
+  json += rtcTotal;
+  json += ",\"rtc_used\":";
+  json += rtcUsed;
+  json += ",\"rtc_pct\":";
+  json += rtcPct;
+  json += ",\"sketch_free\":";
+  json += sketchFree;
+  json += "}";
+  server.send(200, F("application/json"), json);
 }
 
 // Returns true if current date (local, NTP + TIMEZONE_OFFSET_SEC) is listed in birthdays.h.
@@ -396,6 +568,10 @@ void setup() {
   server.on(F("/api/color"), HTTP_POST, handleApiColor);
   server.on(F("/api/alloff"), HTTP_POST, handleApiAlloff);
   server.on(F("/api/play"), HTTP_POST, handleApiPlay);
+  server.on(F("/api/time"), HTTP_GET, handleApiTime);
+  server.on(F("/api/reboot"), HTTP_POST, handleApiReboot);
+  server.on(F("/api/log"), HTTP_GET, handleApiLog);
+  server.on(F("/api/memory"), HTTP_GET, handleApiMemory);
   server.onNotFound([]() { server.send(404, F("text/plain"), F("Not Found")); });
   server.begin();
 #if DEBUG
@@ -482,6 +658,7 @@ void loop() {
       Serial.println(">>> PIR triggered: " + dir + " -> starting animation");
 #endif
       if (isBirthdayToday(currenttime)) {
+        addMotionLog(dir.c_str(), 5);  // 5 = Birthday
         birthday(dir);
         // 10 s delay after birthday animation (same as others)
         for (unsigned long t = millis(); millis() - t < (unsigned long)POST_ANIM_DELAY_MS; ) {
@@ -495,6 +672,7 @@ void loop() {
           choice = random(1, 5);
         } while (choice == lastAnimation);
         lastAnimation = choice;
+        addMotionLog(dir.c_str(), (uint8_t)choice);
 
         switch (choice) {
           case 1:
@@ -521,6 +699,7 @@ void loop() {
 
     if (count++ > 100) {
       currenttime = ntpClient.getUnixTime();
+      g_lastNtpTime = currenttime;
 #if DEBUG
       Serial.printf("NTP time: %d\n", currenttime);
 #endif

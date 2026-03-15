@@ -1,0 +1,9 @@
+{
+  "additionalFiles": "../..",
+  "compiler.optimization_flags": "",
+  "customBuildProperties": "",
+  "fqbn": "esp8266:esp8266:nodemcu",
+  "hardwareFolders": "/Users/thomasstolt/Library/Arduino15/packages/esp8266/hardware/esp8266/3.1.2,/Users/thomasstolt/Library/Arduino15/packages/esp8266/hardware/esp8266/3.1.2",
+  "otherLibrariesFolders": "/Users/thomasstolt/Documents/Arduino/libraries",
+  "sketchLocation": "/Users/thomasstolt/Library/CloudStorage/OneDrive-Persönlich/Documents/Github/Stair-Light-Project/minimal_ota"
+}

@@ -32,8 +32,6 @@ Automatic animated stair lighting with **SK6812 RGBW** LEDs. Two PIR sensors (SR
 | `rgbw_stair_light/` | Main sketch (stair light + OTA) |
 | `rgbw_stair_light/parking.h` | Animations and helpers |
 | `rgbw_stair_light/birthdays.h.example` | Template for birthdays (copy to `birthdays.h`) |
-| `minimal_ota/` | Minimal sketch (WiFi + OTA only, for testing) |
-| `RGBWstrandtest/` | Separate LED strip test (no PIR) |
 | `schematics/` | KiCad schematic, PCB |
 | `images/` | Photos (incl. test bed) |
 
@@ -44,8 +42,6 @@ Automatic animated stair lighting with **SK6812 RGBW** LEDs. Two PIR sensors (SR
 | `upload-to-esp8266.sh` | Compile + upload **via USB** |
 | `upload-to-esp8266-ota.sh` | Compile + upload **via OTA** (WiFi) |
 | `upload-ota-firewall-ok.sh` | OTA with **firewall temporarily disabled** (macOS) |
-| `upload-minimal-via-usb.sh` | Flash minimal sketch via USB |
-| `upload-minimal-ota.sh` | Flash minimal sketch via OTA (test) |
 | `setup-firewall-ota.sh` | Add firewall rule for OTA (macOS, sudo) |
 
 ---
@@ -61,7 +57,7 @@ Credentials go in **`rgbw_stair_light/credentials.h`** (gitignored).
   - `WIFI_PASS` – Wi‑Fi password  
   - `OTA_HOSTNAME` – e.g. `stairlight-testbed` or `stairlight`
 
-Without `credentials.h` the build fails. For the minimal sketch: create `minimal_ota/credentials.h` (or copy from `rgbw_stair_light/`).
+Without `credentials.h` the build fails.
 
 ### 2. Birthdays (optional)
 
@@ -194,19 +190,6 @@ In **`rgbw_stair_light/rgbw_stair_light.ino`** (and `parking.h`):
 | `NIGHT_BRIGHTNESS_MAX` / `NIGHT_BRIGHTNESS_MIN` | Red in night mode max/min (0–255) | 25, 5 |
 
 Pins (see comments in sketch): NeoPixel = GPIO 14 (D5), PIR1 = GPIO 16 (D0), PIR2 = GPIO 4 (D2). Do not use GPIO 15 and 2 (boot behaviour).
-
----
-
-## Minimal OTA test
-
-To check that OTA works at all (without the full sketch):
-
-1. Flash the minimal sketch via USB:  
-   `./upload-minimal-via-usb.sh`
-2. Test OTA of the minimal sketch:  
-   `./upload-minimal-ota.sh stairlight-testbed.local --debug`
-
-If that works, OTA is fine; issues with the full sketch may be due to memory or firewall.
 
 ---
 

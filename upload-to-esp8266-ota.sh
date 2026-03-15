@@ -27,32 +27,25 @@ else
 fi
 
 echo "→ Compile..."
-if [[ -n "$DEBUG_OTA" ]]; then
-  BUILD_DIR="./build"
-  rm -rf "$BUILD_DIR"
-  arduino-cli compile --fqbn esp8266:esp8266:nodemcu --build-path "$BUILD_DIR" rgbw_stair_light
-  BIN=$(ls "$BUILD_DIR"/*.bin 2>/dev/null | head -1)
-  if [[ -z "$BIN" ]]; then
-    echo "Fehler: Keine .bin in $BUILD_DIR gefunden." >&2
-    exit 1
-  fi
-  ESPOTA=$(find "$HOME/Library/Arduino15/packages/esp8266" -name "espota.py" 2>/dev/null | head -1)
-  PYTHON=$(find "$HOME/Library/Arduino15/packages/esp8266/tools" -name "python3" -type f 2>/dev/null | head -1)
-  if [[ -z "$ESPOTA" || -z "$PYTHON" ]]; then
-    echo "Fehler: espota.py oder python3 im ESP8266-Paket nicht gefunden." >&2
-    exit 1
-  fi
-  echo "→ OTA-Upload auf $IP (Debug + Fortschritt)..."
-  exec "$PYTHON" -I "$ESPOTA" -i "$IP" -p 8266 --auth= -d -r -f "$BIN"
+BUILD_DIR="./build"
+rm -rf "$BUILD_DIR"
+arduino-cli compile --fqbn esp8266:esp8266:nodemcu --build-path "$BUILD_DIR" rgbw_stair_light
+BIN=$(ls "$BUILD_DIR"/*.bin 2>/dev/null | head -1)
+if [[ -z "$BIN" ]]; then
+  echo "Fehler: Keine .bin in $BUILD_DIR gefunden." >&2
+  exit 1
 fi
 
-arduino-cli compile --fqbn esp8266:esp8266:nodemcu rgbw_stair_light
+ESPOTA=$(find "$HOME/Library/Arduino15/packages/esp8266" -name "espota.py" 2>/dev/null | head -1)
+PYTHON=$(find "$HOME/Library/Arduino15/packages/esp8266/tools" -name "python3" -type f 2>/dev/null | head -1)
+if [[ -z "$ESPOTA" || -z "$PYTHON" ]]; then
+  echo "Fehler: espota.py oder python3 im ESP8266-Paket nicht gefunden." >&2
+  exit 1
+fi
 
 echo "→ OTA-Upload auf $IP..."
-arduino-cli upload -p "$IP" --fqbn esp8266:esp8266:nodemcu \
-  -l network \
-  -F password= \
-  --discovery-timeout 30s \
-  rgbw_stair_light
-
-echo "→ Fertig."
+if [[ -n "$DEBUG_OTA" ]]; then
+  exec "$PYTHON" -I "$ESPOTA" -i "$IP" -p 8266 --auth= -d -r -f "$BIN"
+else
+  exec "$PYTHON" -I "$ESPOTA" -i "$IP" -p 8266 --auth= -r -f "$BIN"
+fi

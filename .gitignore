@@ -3,13 +3,11 @@
 **/.credentials
 credentials.h
 **/credentials.h
-minimal_ota/credentials.h
 birthdays.h
 **/birthdays.h
 
 # Build-Artefakte (Arduino CLI / OTA)
 build/
-build_minimal/
 *.ino.bin
 *.ino.elf
 *.ino.map
