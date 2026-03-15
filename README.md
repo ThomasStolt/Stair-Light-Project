@@ -5,7 +5,7 @@ Automatic animated stair lighting with **SK6812 RGBW** LEDs. Two PIR sensors (SR
 - **MCU:** ESP8266 (e.g. NodeMCU)
 - **LEDs:** SK6812 RGBW (WS2812-compatible), 27 LEDs per step, 16 steps (configurable)
 - **Sensors:** PIR1 = “up”, PIR2 = “down”
-- **Boot:** Stair automation is **off** after boot; 3× green blink indicates “ready”.
+- **Boot:** Stair automation is **on** after boot; 3× green blink indicates “ready”.
 
 <div align="center">
   <img src="images/stairlight-neopixel.gif" alt="Stair Light test bed" width="100%">
@@ -104,7 +104,7 @@ If OTA fails with the firewall on:
 
 ## Upload via OTA (WiFi)
 
-Prerequisite: the ESP is already running firmware with **ArduinoOTA** (e.g. after the first USB upload) and is on the same Wi‑Fi network.
+Prerequisite: the ESP is already running firmware with **ArduinoOTA** (e.g. after the first USB upload) and is on the same Wi‑Fi network. The OTA script uses **espota.py** (no board discovery required); pass the ESP’s IP or mDNS hostname.
 
 - **By hostname (mDNS):**  
   ```bash
@@ -116,16 +116,20 @@ Prerequisite: the ESP is already running firmware with **ArduinoOTA** (e.g. afte
   ./upload-to-esp8266-ota.sh 192.168.2.185
   ```
 
-The IP is shown in the serial monitor after “Connected, IP address:” or “Web-Server: http://…”.
+The IP is shown in the serial monitor after “Connected, IP address:” or “Web server: http://…”.
 
 **Web UI:** Open `http://<IP>` or `http://<OTA_HOSTNAME>.local` in a browser.
 
-- **Stair automation** on/off (off by default after boot).
-- **Manual colours:** Per channel (red, green, blue, white): −10%, on/off, +10% brightness; value shown in %.
-- **All LEDs off.**
-- **Animation (10 s):** Dropdown with Random fade, Rainbow, White ramp, Star sparkle, Birthday, **Night (red breathing)** – use **Go** to run the selected animation for 10 seconds (any time of day).
+- **Date & time** – NTP-synced local time (updates every second).
+- **Stair automation** on/off (**on** by default after boot).
+- **Manual colours** – Per channel (red, green, blue, white): −10%, on/off, +10% brightness; value shown in %.
+- **All** – Preset buttons 0%, 25%, 50%, 75%, 100% to set all channels to the same brightness.
+- **Reboot** – Restart the ESP from the browser.
+- **Last 5 motions** – Table of recent PIR triggers: time, direction (up/down), animation started.
+- **Memory status** – Table: Heap (RAM), Flash, RTC with total, used, and usage %.
+- **Animation (10 s)** – Dropdown with Random fade, Rainbow, White ramp, Star sparkle, Birthday, **Night (red breathing)**; **Go** runs the selected animation for 10 seconds (any time of day).
 
-The frontend is cached by the browser; actions use the API (GET state, POST for actions). Web server and OTA stay available during animations.
+The frontend is cached by the browser; actions use the API (GET state/time/log/memory, POST for actions). Web server and OTA stay available during animations.
 
 **If the firewall (macOS) blocks OTA:**  
 Use the wrapper script instead of `upload-to-esp8266-ota.sh`:
@@ -212,6 +216,6 @@ More functions and possible new animations are in **`parking.h`**.
 
 ## License / contact
 
-Originally from October 2016; sketch and structure have been extended (OTA, credentials, web API, night mode, birthdays, firewall workaround).
+Originally from October 2016; sketch and structure have been extended (OTA, credentials, web API, night mode, birthdays, firewall workaround, date/time, reboot, motion log, memory status table, All presets, automation on by default, OTA via espota.py).
 
 For questions or ideas for new animations, contact the repository owner.
