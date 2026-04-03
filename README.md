@@ -1,6 +1,6 @@
 # Stair Light Project
 
-Automatic animated stair lighting with **SK6812 RGBW** LEDs. Two PIR sensors (SR-HC501) at the first and last step detect direction and trigger a random animation. Control via **web UI** (stair automation on/off, manual colours, 10 s animation test) and optional **night mode** (0–7 h: red only, breathing).
+Automatic animated stair lighting with **SK6812 RGBW** LEDs. Two PIR sensors (SR-HC501) at the first and last step detect direction and trigger a random animation. Control via **web UI** (stair automation on/off, manual colours, night mode indicator, 10 s animation test) and optional **night mode** (1–6 h: red only, breathing).
 
 - **MCU:** ESP8266 (e.g. NodeMCU)
 - **LEDs:** SK6812 RGBW (WS2812-compatible), 27 LEDs per step, 16 steps (configurable)
@@ -127,7 +127,9 @@ The IP is shown in the serial monitor after “Connected, IP address:” or “W
 - **Reboot** – Restart the ESP from the browser.
 - **Last 5 motions** – Table of recent PIR triggers: time, direction (up/down), animation started.
 - **Memory status** – Table: Heap (RAM), Flash, RTC with total, used, and usage %.
+- **Night mode indicator** – Red badge shown when night mode is active (with hours displayed).
 - **Animation (10 s)** – Dropdown with Random fade, Rainbow, White ramp, Star sparkle, Birthday, **Night (red breathing)**; **Go** runs the selected animation for 10 seconds (any time of day).
+- **Firmware version** – Shown at the bottom of the page.
 
 The frontend is cached by the browser; actions use the API (GET state/time/log/memory, POST for actions). Web server and OTA stay available during animations.
 
@@ -165,13 +167,14 @@ Adjust the port if needed (`arduino-cli board list`). Exit with `Ctrl+C`. While 
 
 ---
 
-## Night mode (0–7 h)
+## Night mode (1–6 h)
 
-Between **0:00 and 7:00 local time** (NTP + `TIMEZONE_OFFSET_SEC`):
+Between **1:00 and 6:00 local time** (NTP + auto CET/CEST):
 
-- Only the **night animation** runs: soft breathing red, max 10% brightness, **never fully off** (minimum brightness is configurable).
-- PIR and manual web colours have no effect.
-- After 7:00 the strip turns off and normal behaviour (automation/manual) applies again.
+- Only the **night animation** runs: soft breathing red, max 20% brightness, **never fully off** (minimum brightness is configurable).
+- PIR triggers the night animation; manual web colours have no effect.
+- After 6:00 the strip turns off and normal behaviour (automation/manual) applies again.
+- The web UI shows a **red "Night mode active" badge** when night mode is on.
 
 The same “Night (red breathing)” animation can be tested anytime in the web UI under **Animation (10 s)** → **Go** for 10 seconds.
 
@@ -190,8 +193,9 @@ In **`rgbw_stair_light/rgbw_stair_light.ino`** (and `parking.h`):
 | `BRIGHTNESS` | LED brightness 0–255 | 255 |
 | `DEBUG` | 1 = PIR/trigger on serial monitor | 1 |
 | `TIMEZONE_OFFSET_SEC` | Seconds UTC→local (e.g. 3600 for CET) | 3600 |
-| `NIGHT_HOUR_START` / `NIGHT_HOUR_END` | Night mode from hour … to (excl.) | 0, 7 |
-| `NIGHT_BRIGHTNESS_MAX` / `NIGHT_BRIGHTNESS_MIN` | Red in night mode max/min (0–255) | 25, 5 |
+| `FW_VERSION` | Firmware version string shown in web UI | "1.0.0" |
+| `NIGHT_HOUR_START` / `NIGHT_HOUR_END` | Night mode from hour … to (excl.) | 1, 6 |
+| `NIGHT_BRIGHTNESS_MAX` / `NIGHT_BRIGHTNESS_MIN` | Red in night mode max/min (0–255) | 50, 10 |
 
 Pins (see comments in sketch): NeoPixel = GPIO 14 (D5), PIR1 = GPIO 16 (D0), PIR2 = GPIO 4 (D2). Do not use GPIO 15 and 2 (boot behaviour).
 
@@ -216,6 +220,6 @@ More functions and possible new animations are in **`parking.h`**.
 
 ## License / contact
 
-Originally from October 2016; sketch and structure have been extended (OTA, credentials, web API, night mode, birthdays, firewall workaround, date/time, reboot, motion log, memory status table, All presets, automation on by default, OTA via espota.py).
+Originally from October 2016; sketch and structure have been extended (OTA, credentials, web API, night mode, birthdays, firewall workaround, date/time, reboot, motion log, memory status table, All presets, automation on by default, OTA via espota.py, night mode indicator, firmware version display).
 
 For questions or ideas for new animations, contact the repository owner.

@@ -56,7 +56,32 @@
 #define NUM_LEDS (STEPS * WIDTH)  // how many LEDs do we have overall?
 #define ANIM_DURATION 20000       // Duration of each animation (ms), then fade-out
 #define POST_ANIM_DELAY_MS 10000  // Delay after animation before next motion trigger (ms)
-#define TIMEZONE_OFFSET_SEC (1*3600)  // CET = UTC+1; 3600 for CET, 7200 for CEST
+// Auto-detect CET/CEST: UTC+1 in winter, UTC+2 in summer (last Sun of March – last Sun of October)
+static long timezoneOffsetSec(long utc) {
+  time_t t = (time_t)utc;
+  struct tm *g = gmtime(&t);
+  int month = g->tm_mon + 1;   // 1-12
+  int day   = g->tm_mday;
+  int wday  = g->tm_wday;      // 0=Sun
+  int hour  = g->tm_hour;
+  // Last Sunday of month = last day minus (wday of last day)
+  // For March/October: switch happens at 01:00 UTC on last Sunday
+  if (month < 3 || month > 10) return 3600;        // Nov–Feb: CET (UTC+1)
+  if (month > 3 && month < 10) return 7200;         // Apr–Sep: CEST (UTC+2)
+  // March: CEST starts last Sunday at 01:00 UTC
+  int lastSun = 31 - ((5 + wday + 31 - day) % 7);  // last Sunday's date this month
+  if (month == 3) {
+    if (day < lastSun) return 3600;
+    if (day > lastSun) return 7200;
+    return (hour < 1) ? 3600 : 7200;
+  }
+  // October: CET starts last Sunday at 01:00 UTC
+  lastSun = 31 - ((2 + wday + 31 - day) % 7);
+  if (day < lastSun) return 7200;
+  if (day > lastSun) return 3600;
+  return (hour < 1) ? 7200 : 3600;
+}
+#define TIMEZONE_OFFSET_SEC timezoneOffsetSec
 // if BRIGHNESS is too small (around 10 or less), the animation appears 'skippy', i.e. not smooth
 // that is because there are only a few (10) levels of brighness for each color, so this is normal
 #define BRIGHTNESS 255            // limit brightness of the strip
@@ -75,6 +100,16 @@ uint32_t g_animDurationOverrideMs = 0;
 
 // Last NTP time (UTC) from main loop; used by /api/time for Web UI date/time display
 volatile long g_lastNtpTime = 0;
+// First valid NTP time after boot (for "last reboot" display in Web UI)
+static long s_bootTimeUtc = 0;
+
+// Reset reason / exception info cached once at boot (before WiFi changes them)
+static String s_resetReason;
+static String s_resetInfo;
+
+// WiFi reconnect counter (incremented on every re-connect after the first one)
+static uint32_t g_wifiReconnectCount = 0;
+static WiFiEventHandler g_wifiReconnectHandler;
 
 // Last 5 motion events (direction + animation) for Web UI log
 #define MOTION_LOG_SIZE 5
@@ -113,6 +148,17 @@ int gammaw[] = {
   144,146,148,150,152,154,156,158,160,162,164,167,169,171,173,175,
   177,180,182,184,186,189,191,193,196,198,200,203,205,208,210,213,
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
+
+// Firmware version – shown in web UI footer
+#define FW_VERSION "1.0.0"
+
+// Night mode parameters – defined here so parking.h can use them
+#define NIGHT_HOUR_START      1   // 1:00
+#define NIGHT_HOUR_END        6   // 6:00 (exclusive)
+#define NIGHT_HOUR_START_STR  "1"
+#define NIGHT_HOUR_END_STR    "6"
+#define NIGHT_BRIGHTNESS_MAX  50  // max red value during night (≈ 20%)
+#define NIGHT_BRIGHTNESS_MIN  10  // min red value (never fully off)
 
 // Called in animations and wait loops so OTA and web server stay responsive during animation
 void handleNetwork(void);
@@ -166,16 +212,25 @@ void handleIndex() {
     "body{font-family:sans-serif;margin:0;background:#1a1a1a;color:#eee;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:1.5rem 1rem;box-sizing:border-box;}"
     "main{text-align:center;max-width:420px;width:100%;} h1{font-size:1.3rem;margin:0 0 1rem;}"
     ".row{display:flex;align-items:center;justify-content:center;gap:0.4rem;margin:0.5rem 0;flex-wrap:nowrap;overflow-x:auto;padding:2px 0;}"
-    "button.btn{padding:0.9rem 1.2rem;margin:2px;border-radius:10px;font-size:1.1rem;cursor:pointer;border:none;min-height:2.6em;flex-shrink:0;}"
-    ".minus{background:#2a3a4a;color:#8cf;} .plus{background:#2a3a4a;color:#8cf;} .onoff{background:#444;color:#fff;}"
-    ".auto{background:#2a4a2a;color:#9f9;} .auto.off{background:#4a2a2a;color:#f99;} .pctbtn{background:#2a3a4a;color:#8cf;}"
+    "button.btn{padding:0.9rem 1.2rem;margin:2px;border-radius:10px;font-size:1.1rem;cursor:pointer;border:1px solid rgba(0,0,0,0.25);min-height:2.6em;flex-shrink:0;"
+    "box-shadow:inset 0 1px 0 rgba(255,255,255,0.18),0 3px 6px rgba(0,0,0,0.35);text-shadow:0 1px 1px rgba(0,0,0,0.3);transition:box-shadow .1s,transform .1s;}"
+    "button.btn:active{box-shadow:inset 0 2px 6px rgba(0,0,0,0.4);transform:translateY(1px);}"
+    ".minus,.plus,.pctbtn{background:linear-gradient(180deg,#3a4a5c 0%,#2a3a4a 45%,#1a2a38 100%);color:#8cf;}"
+    ".onoff{background:linear-gradient(180deg,#555 0%,#444 45%,#333 100%);color:#fff;}"
+    ".auto{background:linear-gradient(180deg,#3a5a3a 0%,#2a4a2a 45%,#1a3a1a 100%);color:#9f9;}"
+    ".auto.off{background:linear-gradient(180deg,#5a3a3a 0%,#4a2a2a 45%,#3a1a1a 100%);color:#f99;}"
+    ".reboot{background:linear-gradient(180deg,#884422 0%,#663300 45%,#442200 100%);color:#ffc;}"
+    ".go{background:linear-gradient(180deg,#3a6a3a 0%,#2a5a2a 45%,#1a4a1a 100%);color:#9f9;}"
+    "button.btn.allpct{padding:0.5rem 0.5rem;min-width:0;font-size:0.95rem;}"
     "span.pct{display:inline-block;min-width:2.2em;text-align:left;} .led{width:14px;height:14px;border-radius:50%;display:inline-block;margin-right:0.35rem;box-shadow:0 0 6px currentColor;}"
     ".led-r{background:#e00;} .led-g{background:#0a0;} .led-b{background:#06f;} .led-w{background:#eee;}"
     "table{width:100%;border-collapse:collapse;font-size:0.85rem;margin-top:0.3rem;} th,td{border:1px solid #444;padding:0.25rem 0.4rem;text-align:left;} th{background:#333;}"
     "</style></head><body><main><h1>Stair Light</h1>"
     "<p style=margin-bottom:0.5rem;font-size:0.95rem;><span id=dateDisplay>--</span> <span id=timeDisplay>--</span></p>"
+    "<p style=margin-bottom:0.3rem;font-size:0.85rem;>Uptime: <span id=uptimeDisplay>--</span> &nbsp; Last reboot: <span id=lastRebootDisplay>--</span></p>"
     "<p style=margin-bottom:1rem;><b>Stair automation</b><br>"
     "<button type=button class=\"btn auto\" id=autoOn>On</button> <button type=button class=\"btn auto off\" id=autoOff>Off</button> &rarr; <b id=autoStatus>–</b></p>"
+    "<p id=nightBadge style=\"display:none;margin:-0.5rem 0 0.8rem;padding:0.4rem 0.8rem;border-radius:8px;background:rgba(180,40,40,0.25);border:1px solid #a33;font-size:0.9rem;color:#f88;\">Night mode active (" NIGHT_HOUR_START_STR ":00 – " NIGHT_HOUR_END_STR ":00)</p>"
     "<div class=row><span class=\"led led-r\"></span><button type=button class=\"btn minus\" data-c=r data-a=minus>−10%</button>"
     "<button type=button class=\"btn onoff\" id=togR>Off</button><button type=button class=\"btn plus\" data-c=r data-a=plus>+10%</button><span id=pctR class=pct>0%</span></div>"
     "<div class=row><span class=\"led led-g\"></span><button type=button class=\"btn minus\" data-c=g data-a=minus>−10%</button>"
@@ -188,26 +243,40 @@ void handleIndex() {
     "<div class=row style=align-items:center;><button type=button class=\"btn minus allpct\" data-all=0>0%</button>"
     "<button type=button class=\"btn pctbtn allpct\" data-all=25>25%</button><button type=button class=\"btn pctbtn allpct\" data-all=50>50%</button>"
     "<button type=button class=\"btn pctbtn allpct\" data-all=75>75%</button><button type=button class=\"btn plus allpct\" data-all=100>100%</button></div>"
-    "<p style=margin-top:0.8rem;><button type=button class=\"btn\" id=rebootBtn style=background:#663300;color:#ffc;>Reboot</button></p>"
+    "<p style=margin-top:0.8rem;><button type=button class=\"btn reboot\" id=rebootBtn>Reboot</button></p>"
     "<p style=margin-top:1rem;><b>Last 5 motions</b></p>"
     "<table><thead><tr><th>Time</th><th>Direction</th><th>Animation</th></tr></thead><tbody id=motionLogBody></tbody></table>"
     "<p style=margin-top:1rem;><b>Memory status</b></p>"
     "<table><thead><tr><th>Type</th><th>Total</th><th>Used</th><th>Usage</th></tr></thead><tbody id=memoryBody></tbody></table>"
+    "<p style=margin-top:1rem;><b>CPU / Runtime</b></p>"
+    "<table><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody id=cpuBody></tbody></table>"
+    "<p style=margin-top:1rem;><b>WiFi</b></p>"
+    "<table><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody id=wifiBody></tbody></table>"
     "<p style=margin-top:1rem;><b>Animation (10 s)</b><br>"
     "<select id=animSelect style=padding:0.4rem;background:#333;color:#eee;border-radius:6px;margin-right:0.5rem;>"
     "<option value=1>Random fade</option><option value=2>Rainbow</option><option value=3>White ramp</option>"
     "<option value=4>Star sparkle</option><option value=5>Birthday</option><option value=6>Night (red breathing)</option></select>"
-    "<button type=button class=btn id=playAnim style=background:#2a5a2a;color:#9f9;>Go</button></p></main><script>"
+    "<button type=button class=\"btn go\" id=playAnim>Go</button></p>"
+    "<p style=margin-top:1.5rem;font-size:0.75rem;color:#666;>Firmware v" FW_VERSION "</p></main><script>"
     "function load(){"
-    "Promise.all([fetch('/api/state').then(function(r){return r.json();}), fetch('/api/time').then(function(r){return r.json();}), fetch('/api/log').then(function(r){return r.json();}), fetch('/api/memory').then(function(r){return r.json();})]).then(function(arr){"
-    "var d=arr[0], t=arr[1], log=arr[2], mem=arr[3];"
+    "Promise.all([fetch('/api/state').then(function(r){return r.json();}), fetch('/api/time').then(function(r){return r.json();}), fetch('/api/log').then(function(r){return r.json();}), fetch('/api/memory').then(function(r){return r.json();}), fetch('/api/sysinfo').then(function(r){return r.json();})]).then(function(arr){"
+    "var d=arr[0], t=arr[1], log=arr[2], mem=arr[3], sys=arr[4];"
     "document.getElementById('autoStatus').textContent=d.auto? 'On':'Off';"
+    "document.getElementById('nightBadge').style.display=d.night? 'block':'none';"
     "var ch=['r','g','b','w'], id=['pctR','pctG','pctB','pctW'], tog=['togR','togG','togB','togW'];"
     "for(var i=0;i<4;i++){ document.getElementById(id[i]).textContent=d[ch[i]]+'%'; document.getElementById(tog[i]).textContent=d[ch[i]]>0?'On':'Off'; }"
     "document.getElementById('dateDisplay').textContent=t.date||'--'; document.getElementById('timeDisplay').textContent=t.time||'--';"
+    "var ms=t.uptime_ms||0; var d=Math.floor(ms/86400000), h=Math.floor((ms%86400000)/3600000), m=Math.floor((ms%3600000)/60000);"
+    "document.getElementById('uptimeDisplay').textContent=(d>0? d+'d ':'')+h+'h '+m+'m';"
+    "document.getElementById('lastRebootDisplay').textContent=t.last_reboot||'--';"
     "var tb=document.getElementById('motionLogBody'); tb.innerHTML=''; for(var i=0;i<log.length;i++){ var r=document.createElement('tr'); r.innerHTML='<td>'+log[i].time+'</td><td>'+log[i].dir+'</td><td>'+log[i].anim+'</td>'; tb.appendChild(r); }"
     "function fmt(n){ return n>=1024 ? (n/1024).toFixed(1)+' KB' : n+' B'; }"
     "var mb=document.getElementById('memoryBody'); mb.innerHTML='<tr><td>Heap (RAM)</td><td>'+fmt(mem.heap_total)+'</td><td>'+fmt(mem.heap_used)+'</td><td>'+mem.heap_pct+'%</td></tr><tr><td>Flash</td><td>'+fmt(mem.flash_size)+'</td><td>'+fmt(mem.flash_used)+'</td><td>'+mem.flash_pct+'%</td></tr><tr><td>RTC</td><td>'+fmt(mem.rtc_total)+'</td><td>'+fmt(mem.rtc_used)+'</td><td>'+mem.rtc_pct+'%</td></tr>';"
+    "var rsn=sys.reset_reason||'--'; var exRow=(rsn.indexOf('xception')>=0)?'<tr><td>Exception info</td><td>'+sys.reset_info+'</td></tr>':'';"
+    "document.getElementById('cpuBody').innerHTML='<tr><td>CPU freq</td><td>'+sys.cpu_mhz+' MHz</td></tr><tr><td>Reset reason</td><td>'+rsn+'</td></tr>'+exRow;"
+    "function rssiQ(v){ if(v>=-50)return 'Excellent'; if(v>=-60)return 'Good'; if(v>=-70)return 'Fair'; return 'Poor'; }"
+    "var rssi=sys.rssi||0;"
+    "document.getElementById('wifiBody').innerHTML='<tr><td>SSID</td><td>'+sys.ssid+'</td></tr><tr><td>BSSID</td><td>'+sys.bssid+'</td></tr><tr><td>IP</td><td>'+sys.ip+'</td></tr><tr><td>Gateway</td><td>'+sys.gateway+'</td></tr><tr><td>DNS</td><td>'+sys.dns+'</td></tr><tr><td>Channel</td><td>'+sys.channel+'</td></tr><tr><td>RSSI</td><td>'+rssi+' dBm ('+rssiQ(rssi)+')</td></tr><tr><td>Reconnects</td><td>'+sys.reconnects+'</td></tr>';"
     "});}"
     "function post(url,body){ return fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body||''}).then(load);}"
     "document.getElementById('autoOn').onclick=function(){ post('/api/auto','on=1'); };"
@@ -232,6 +301,7 @@ void handleApiState() {
   json += ",\"g\":"; json += manual_g;
   json += ",\"b\":"; json += manual_b;
   json += ",\"w\":"; json += manual_w;
+  json += ",\"night\":"; json += isNightMode(g_lastNtpTime) ? "1" : "0";
   json += "}";
   server.sendHeader(F("Cache-Control"), F("no-store"));
   server.send(200, F("application/json"), json);
@@ -301,12 +371,9 @@ void handleApiPlay() {
   if (anim < 1 || anim > 6) { server.send(400, F("text/plain"), F("anim 1..6")); return; }
 
   if (anim == 6) {
-    unsigned long start = millis();
-    while (millis() - start < 10000uL) {
-      updateNightRed();
-      handleNetwork();
-      delay(100);
-    }
+    g_animDurationOverrideMs = 10000;
+    nightAnimation("UP");
+    g_animDurationOverrideMs = 0;
     setAll(0, 0, 0, 0);
     strip.show();
     server.send(204);
@@ -323,23 +390,41 @@ void handleApiPlay() {
   server.send(204);
 }
 
-// GET /api/time – JSON with date and time (local, from NTP) for Web UI
+// GET /api/time – JSON with date, time, uptime_ms, last_reboot (local, from NTP) for Web UI
 void handleApiTime() {
   server.sendHeader(F("Cache-Control"), F("no-store"));
   String json = "{\"date\":\"";
   if (g_lastNtpTime <= 0) {
-    json += "--\",\"time\":\"--\"}";
+    json += "--\",\"time\":\"--\"";
   } else {
-    time_t t = (time_t)(g_lastNtpTime + TIMEZONE_OFFSET_SEC);
+    time_t t = (time_t)(g_lastNtpTime + TIMEZONE_OFFSET_SEC(g_lastNtpTime));
     struct tm *tm = gmtime(&t);
     if (!tm) {
-      json += "--\",\"time\":\"--\"}";
+      json += "--\",\"time\":\"--\"";
     } else {
-      char buf[16];
+      char buf[24];
       snprintf(buf, sizeof(buf), "%04d-%02d-%02d", tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday);
       json += buf;
       json += "\",\"time\":\"";
       snprintf(buf, sizeof(buf), "%02d:%02d:%02d", tm->tm_hour, tm->tm_min, tm->tm_sec);
+      json += buf;
+    }
+  }
+  json += "\",\"uptime_ms\":";
+  json += (unsigned long)millis();
+  json += ",\"last_reboot\":\"";
+  if (s_bootTimeUtc <= 0) {
+    json += "--\"}";
+  } else {
+    time_t bt = (time_t)(s_bootTimeUtc + TIMEZONE_OFFSET_SEC(s_bootTimeUtc));
+    struct tm *bm = gmtime(&bt);
+    if (!bm) {
+      json += "--\"}";
+    } else {
+      char buf[24];
+      snprintf(buf, sizeof(buf), "%04d-%02d-%02d %02d:%02d:%02d",
+               bm->tm_year + 1900, bm->tm_mon + 1, bm->tm_mday,
+               bm->tm_hour, bm->tm_min, bm->tm_sec);
       json += buf;
       json += "\"}";
     }
@@ -370,7 +455,7 @@ void handleApiLog() {
     if (motionLog[idx].timestamp <= 0) {
       json += "--:--";
     } else {
-      time_t t = (time_t)(motionLog[idx].timestamp + TIMEZONE_OFFSET_SEC);
+      time_t t = (time_t)(motionLog[idx].timestamp + TIMEZONE_OFFSET_SEC(motionLog[idx].timestamp));
       struct tm *tm = gmtime(&t);
       if (tm) {
         char buf[8];
@@ -435,10 +520,10 @@ void handleApiMemory() {
   server.send(200, F("application/json"), json);
 }
 
-// Returns true if current date (local, NTP + TIMEZONE_OFFSET_SEC) is listed in birthdays.h.
+// Returns true if current date (local, NTP + CET/CEST offset) is listed in birthdays.h.
 bool isBirthdayToday(long unixTimeUtc) {
   if (BIRTHDAY_COUNT == 0) return false;
-  time_t t = (time_t)(unixTimeUtc + TIMEZONE_OFFSET_SEC);
+  time_t t = (time_t)(unixTimeUtc + TIMEZONE_OFFSET_SEC(unixTimeUtc));
   struct tm *tm = gmtime(&t);
   if (!tm) return false;
   int month = tm->tm_mon + 1;
@@ -450,15 +535,31 @@ bool isBirthdayToday(long unixTimeUtc) {
   return false;
 }
 
-// 0–7 h local: only soft animated red, max 10% brightness
-#define NIGHT_HOUR_START  0   // 0:00
-#define NIGHT_HOUR_END    7   // 7:00 (exclusive)
-#define NIGHT_BRIGHTNESS_MAX  25   // 255 * 10% ≈ 25
-#define NIGHT_BRIGHTNESS_MIN  5    // Lower bound so red never fully off
+// GET /api/sysinfo – CPU freq, reset reason/exception, WiFi details, reconnect counter
+void handleApiSysinfo() {
+  server.sendHeader(F("Cache-Control"), F("no-store"));
+  // Sanitise reset_info: replace " so it doesn't break the JSON string
+  String ri = s_resetInfo;
+  ri.replace("\"", "'");
+  String json = "{\"cpu_mhz\":";
+  json += ESP.getCpuFreqMHz();
+  json += ",\"reset_reason\":\""; json += s_resetReason;     json += "\"";
+  json += ",\"reset_info\":\"";   json += ri;                json += "\"";
+  json += ",\"rssi\":";           json += WiFi.RSSI();
+  json += ",\"ssid\":\"";         json += WiFi.SSID();       json += "\"";
+  json += ",\"bssid\":\"";        json += WiFi.BSSIDstr();   json += "\"";
+  json += ",\"ip\":\"";           json += WiFi.localIP().toString();      json += "\"";
+  json += ",\"gateway\":\"";      json += WiFi.gatewayIP().toString();    json += "\"";
+  json += ",\"dns\":\"";          json += WiFi.dnsIP().toString();        json += "\"";
+  json += ",\"channel\":";        json += WiFi.channel();
+  json += ",\"reconnects\":";     json += g_wifiReconnectCount;
+  json += "}";
+  server.send(200, F("application/json"), json);
+}
 
 bool isNightMode(long unixTimeUtc) {
   if (unixTimeUtc <= 0) return false;
-  time_t t = (time_t)(unixTimeUtc + TIMEZONE_OFFSET_SEC);
+  time_t t = (time_t)(unixTimeUtc + TIMEZONE_OFFSET_SEC(unixTimeUtc));
   struct tm *tm = gmtime(&t);
   if (!tm) return false;
   int hour = tm->tm_hour;
@@ -485,6 +586,17 @@ void setup() {
   USE_SERIAL.println();
   USE_SERIAL.println();
   USE_SERIAL.println();
+
+  // Cache reset reason/info before WiFi stack overwrites them
+  s_resetReason = ESP.getResetReason();
+  s_resetInfo   = ESP.getResetInfo();
+
+  // Count WiFi re-connects (skip the very first connection at boot)
+  g_wifiReconnectHandler = WiFi.onStationModeConnected([](const WiFiEventStationModeConnected&) {
+    static bool first = true;
+    if (first) { first = false; return; }
+    g_wifiReconnectCount++;
+  });
 
   // Turn off LEDs immediately (before WiFi/OTA – otherwise strip state undefined)
   strip.setBrightness(BRIGHTNESS);
@@ -571,7 +683,8 @@ void setup() {
   server.on(F("/api/time"), HTTP_GET, handleApiTime);
   server.on(F("/api/reboot"), HTTP_POST, handleApiReboot);
   server.on(F("/api/log"), HTTP_GET, handleApiLog);
-  server.on(F("/api/memory"), HTTP_GET, handleApiMemory);
+  server.on(F("/api/memory"),  HTTP_GET,  handleApiMemory);
+  server.on(F("/api/sysinfo"), HTTP_GET,  handleApiSysinfo);
   server.onNotFound([]() { server.send(404, F("text/plain"), F("Not Found")); });
   server.begin();
 #if DEBUG
@@ -620,10 +733,13 @@ void loop() {
     watchdogCount = 0;
     bool night = isNightMode(currenttime);
 
-    // 0–7 h: only red, soft animated, max 10% brightness (no PIR, no manual)
+    // 23–6 h: night mode; strip stays off when idle, PIR triggers nightAnimation below
     if (night) {
-      updateNightRed();
-      if (!wasNightMode) wasNightMode = true;
+      if (!wasNightMode) {
+        setAll(0, 0, 0, 0);
+        strip.show();
+        wasNightMode = true;
+      }
     } else {
       if (wasNightMode) {
         setAll(0, 0, 0, 0);
@@ -652,8 +768,17 @@ void loop() {
     if (pir1 == HIGH) { dir = "UP"; }
     if (pir2 == HIGH) { dir = "DOWN"; }
 
-    // PIR animation only outside night mode
-    if (!night && automationOn && dir != "") {
+    if (night && dir != "") {
+#if DEBUG
+      Serial.println(">>> PIR triggered (night): " + dir + " -> night animation");
+#endif
+      addMotionLog(dir.c_str(), 6);
+      nightAnimation(dir);
+      for (unsigned long t = millis(); millis() - t < (unsigned long)POST_ANIM_DELAY_MS; ) {
+        handleNetwork();
+        delay(100);
+      }
+    } else if (!night && automationOn && dir != "") {
 #if DEBUG
       Serial.println(">>> PIR triggered: " + dir + " -> starting animation");
 #endif
@@ -700,6 +825,7 @@ void loop() {
     if (count++ > 100) {
       currenttime = ntpClient.getUnixTime();
       g_lastNtpTime = currenttime;
+      if (s_bootTimeUtc == 0 && currenttime > 0) s_bootTimeUtc = currenttime;
 #if DEBUG
       Serial.printf("NTP time: %d\n", currenttime);
 #endif

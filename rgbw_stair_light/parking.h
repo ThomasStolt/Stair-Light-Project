@@ -331,54 +331,65 @@ void setStep(int s, int c){
 // -----------------------------------------------------------------------------------
 void rainbowSteps(String dir){
   Serial.println("rainbowSteps");
-  int i, j, k;
+  int j, k;
   unsigned long s_timer;
   bool timed_out;
   uint32_t limit = (g_animDurationOverrideMs != 0) ? g_animDurationOverrideMs : (uint32_t)ANIM_DURATION;
+
+  // Fade a single step in/out using gamma-corrected brightness scaled over its exact
+  // Wheel colour, so the brightness at fade-end matches the animation start exactly.
+  const int FIN  = 12;  // frames per step fade-in  (~160 ms/step)
+  const int FOUT =  8;  // frames per step fade-out (~100 ms/step)
+
+  auto fadeStep = [&](int step, bool fadeIn) {
+    uint32_t wc = Wheel(byte((step-1)*255/STEPS));
+    uint8_t wr = red(wc), wg = green(wc), wb = blue(wc);
+    int sp = (step-1)*WIDTH;
+    int frames = fadeIn ? FIN : FOUT;
+    for (int f = 0; f <= frames; f++) {
+      int fi = fadeIn ? f : (frames - f);
+      uint8_t brt = gammaw[fi*255/frames];
+      uint8_t r = (uint8_t)((uint32_t)wr*brt/255);
+      uint8_t g = (uint8_t)((uint32_t)wg*brt/255);
+      uint8_t b = (uint8_t)((uint32_t)wb*brt/255);
+      for (int p = sp; p < sp+WIDTH; p++)
+        strip.setPixelColor(p, strip.Color(r, g, b, 0));
+      strip.show();
+      handleNetwork();
+      yield();
+    }
+  };
+
   if (dir == "DOWN") {
     Serial.println("Moving down the stairs");
-    for (j=STEPS;j>=0;j--){
-      fadeInSingleStep(j, 75, red(Wheel(int(((j-1)*255/STEPS)))), green(Wheel(int(((j-1)*255/STEPS)))), blue(Wheel(int(((j-1)*255/STEPS)))),0);
-    }
-    s_timer = millis();
-    timed_out = false;
-    for (k=0;k<2;k++) {
-      for (i=0;i<256;i=i+2){
+    for (j = STEPS; j >= 1; j--) fadeStep(j, true);
+    s_timer = millis(); timed_out = false;
+    for (k = 0; k < 2; k++) {
+      for (int i = 0; i < 256; i += 2) {
         if (millis() - s_timer > limit) { timed_out = true; break; }
         handleNetwork();
-        for (j=1;j<=STEPS;j++){
-          setStep(j,Wheel(int(i + ((j-1) * 255 / STEPS))));
-        }
+        for (j = 1; j <= STEPS; j++) setStep(j, Wheel(byte(i + (j-1)*255/STEPS)));
         strip.show();
         yield();
       }
       if (timed_out) break;
     }
-    for (j=STEPS;j>=0;j--){
-      fadeOutSingleStep(j, 30, red(Wheel(int(((j-1)*255/STEPS)))), green(Wheel(int(((j-1)*255/STEPS)))), blue(Wheel(int(((j-1)*255/STEPS)))),0);
-    }
-  } else if ( dir == "UP" ) {
+    for (j = STEPS; j >= 1; j--) fadeStep(j, false);
+  } else if (dir == "UP") {
     Serial.println("Moving up the stairs");
-    for (j=1;j<=STEPS;j++){
-      fadeInSingleStep(j, 75, red(Wheel(int(((j-1)*255/STEPS)))), green(Wheel(int(((j-1)*255/STEPS)))), blue(Wheel(int(((j-1)*255/STEPS)))),0);
-    }
-    s_timer = millis();
-    timed_out = false;
-    for (k=0;k<2;k++) {
-      for (i=256;i>0;i--){
+    for (j = 1; j <= STEPS; j++) fadeStep(j, true);
+    s_timer = millis(); timed_out = false;
+    for (k = 0; k < 2; k++) {
+      for (int i = 256; i > 0; i--) {
         if (millis() - s_timer > limit) { timed_out = true; break; }
         handleNetwork();
-        for (j=1;j<=STEPS;j++){
-          setStep(j,Wheel(int(i + ((j-1) * 255 / STEPS))));
-        }
+        for (j = 1; j <= STEPS; j++) setStep(j, Wheel(byte(i + (j-1)*255/STEPS)));
         strip.show();
         yield();
       }
       if (timed_out) break;
     }
-    for (j=1;j<=STEPS;j++){
-      fadeOutSingleStep(j, 30, red(Wheel(int(((j-1)*255/STEPS)))), green(Wheel(int(((j-1)*255/STEPS)))), blue(Wheel(int(((j-1)*255/STEPS)))),0);
-    }
+    for (j = 1; j <= STEPS; j++) fadeStep(j, false);
   }
 }
 
@@ -425,6 +436,74 @@ void birthday(String dir) {
   setAll(0,0,0,0);
   strip.show();
 }
+
+// ===================================================================================
+// NAME
+// nightAnimation
+// -----------------------------------------------------------------------------------
+// SHORT DESCRIPTION
+// Night mode animation (1–6 h): dim red, cascaded fade – each step starts when the
+// previous one reaches ~10% brightness, so multiple steps glow simultaneously for a
+// soft wave effect. bStep controls speed (brightness units per frame); overlap is the
+// 10% threshold (26/255) at which the next step begins.
+// gammaw[] is applied over the full 0–255 range (perceptually linear fade), then the
+// result is scaled to NIGHT_BRIGHTNESS_MAX so the strip stays dim during night hours.
+// -----------------------------------------------------------------------------------
+void nightAnimation(String dir) {
+  Serial.println("nightAnimation");
+  unsigned long s_timer = millis();
+  uint32_t limit = (g_animDurationOverrideMs != 0) ? g_animDurationOverrideMs : (uint32_t)ANIM_DURATION;
+  const int bStep   = 3;   // brightness increment per frame (~3 s total fade-in)
+  const int overlap = 26;  // ~10% of 255: next step starts when previous reaches this
+  const int totalIter = (255 + (STEPS - 1) * overlap + bStep - 1) / bStep;
+
+  // Cascaded fade-in
+  for (int iter = 0; iter <= totalIter; iter++) {
+    for (int k = 0; k < STEPS; k++) {
+      int br = iter * bStep - k * overlap;
+      if (br < 0) continue;
+      if (br > 255) br = 255;
+      int s = (dir == "UP") ? (k + 1) : (STEPS - k);
+      int step_start = (s - 1) * WIDTH;
+      int step_end   = step_start + WIDTH;
+      uint8_t pix = (uint8_t)((uint32_t)gammaw[br] * NIGHT_BRIGHTNESS_MAX / 255);
+      for (int j = step_start; j < step_end; j++)
+        strip.setPixelColor(j, pix, 0, 0, 0);
+    }
+    strip.show();
+    handleNetwork();
+    yield();
+  }
+
+  // Hold
+  while (millis() - s_timer < limit) {
+    handleNetwork();
+    delay(100);
+    yield();
+  }
+
+  // Cascaded fade-out (same direction as fade-in)
+  for (int iter = 0; iter <= totalIter; iter++) {
+    for (int k = 0; k < STEPS; k++) {
+      int br = iter * bStep - k * overlap;
+      if (br < 0) continue;
+      if (br > 255) br = 255;
+      int s = (dir == "UP") ? (k + 1) : (STEPS - k);
+      int step_start = (s - 1) * WIDTH;
+      int step_end   = step_start + WIDTH;
+      uint8_t pix = (uint8_t)((uint32_t)gammaw[255 - br] * NIGHT_BRIGHTNESS_MAX / 255);
+      for (int j = step_start; j < step_end; j++)
+        strip.setPixelColor(j, pix, 0, 0, 0);
+    }
+    strip.show();
+    handleNetwork();
+    yield();
+  }
+
+  yield();
+}
+// -----------------------------------------------------------------------------------
+
 
 // ===================================================================================
 // NAME
