@@ -155,7 +155,7 @@ int gammaw[] = {
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
 // Firmware version – shown in web UI footer
-#define FW_VERSION "1.0.0"
+#define FW_VERSION "2.0.0"
 
 // Night mode parameters – defined here so parking.h can use them
 #define NIGHT_HOUR_START      1   // 1:00
