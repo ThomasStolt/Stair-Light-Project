@@ -671,20 +671,20 @@ void setup() {
 #endif
   }
 
-  // Web server: frontend cacheable (GET /), API GET/POST
-  server.on(F("/"), handleIndex);
-  server.on(F("/index.html"), handleIndex);
-  server.on(F("/api/state"), HTTP_GET, handleApiState);
-  server.on(F("/api/auto"), HTTP_POST, handleApiAuto);
-  server.on(F("/api/color"), HTTP_POST, handleApiColor);
-  server.on(F("/api/alloff"), HTTP_POST, handleApiAlloff);
-  server.on(F("/api/play"), HTTP_POST, handleApiPlay);
-  server.on(F("/api/time"), HTTP_GET, handleApiTime);
-  server.on(F("/api/reboot"), HTTP_POST, handleApiReboot);
-  server.on(F("/api/log"), HTTP_GET, handleApiLog);
-  server.on(F("/api/memory"),  HTTP_GET,  handleApiMemory);
-  server.on(F("/api/sysinfo"), HTTP_GET,  handleApiSysinfo);
-  server.onNotFound([]() { server.send(404, F("text/plain"), F("Not Found")); });
+  // Web server: frontend cacheable (GET /), API GET/POST (AsyncWebServer)
+  server.on("/", HTTP_GET, handleIndex);
+  server.on("/index.html", HTTP_GET, handleIndex);
+  server.on("/api/state", HTTP_GET, handleApiState);
+  server.on("/api/auto", HTTP_POST, handleApiAuto);
+  server.on("/api/color", HTTP_POST, handleApiColor);
+  server.on("/api/alloff", HTTP_POST, handleApiAlloff);
+  server.on("/api/play", HTTP_POST, handleApiPlay);
+  server.on("/api/time", HTTP_GET, handleApiTime);
+  server.on("/api/reboot", HTTP_POST, handleApiReboot);
+  server.on("/api/log", HTTP_GET, handleApiLog);
+  server.on("/api/memory", HTTP_GET, handleApiMemory);
+  server.on("/api/sysinfo", HTTP_GET, handleApiSysinfo);
+  server.onNotFound([](AsyncWebServerRequest *request) { request->send(404, F("text/plain"), F("Not Found")); });
   server.begin();
 #if DEBUG
   Serial.println("Web server: http://" + WiFi.localIP().toString());
@@ -730,6 +730,32 @@ void loop() {
   while (true) {
     ArduinoOTA.handle();
     watchdogCount = 0;
+
+    // Handle pending reboot from web UI
+    if (g_pendingReboot) {
+      delay(300);
+      ESP.restart();
+    }
+
+    // Handle pending animation from web UI
+    if (g_pendingPlayAnim > 0) {
+      int anim = g_pendingPlayAnim;
+      g_pendingPlayAnim = 0;
+      g_animDurationOverrideMs = 10000;
+      if (anim == 6) {
+        nightAnimation("UP");
+        setAll(0, 0, 0, 0);
+        strip.show();
+      } else if (anim == 1) simpleFadeToRandom(F("UP"));
+      else if (anim == 2) rainbowSteps(F("UP"));
+      else if (anim == 3) FadeToFullBrightness(F("UP"));
+      else if (anim == 4) starSparkle(F("UP"));
+      else if (anim == 5) birthday(F("UP"));
+      g_animDurationOverrideMs = 0;
+      if (!automationOn) applyManualColor();
+      else { setAll(0, 0, 0, 0); strip.show(); }
+    }
+
     bool night = isNightMode(currenttime);
 
     // 23–6 h: night mode; strip stays off when idle, PIR triggers nightAnimation below
