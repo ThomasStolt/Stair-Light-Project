@@ -201,9 +201,8 @@ void applyManualColor() {
 }
 
 // Statisches Frontend (cachebar), State und Aktionen per API
-void handleIndex() {
-  server.sendHeader(F("Cache-Control"), F("public, max-age=3600"));
-  server.send_P(200, PSTR("text/html"), PSTR(
+void handleIndex(AsyncWebServerRequest *request) {
+  AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", PSTR(
     "<!DOCTYPE html><html><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\">"
     "<title>Stair Light</title><style>"
     "body{font-family:sans-serif;margin:0;background:#1a1a1a;color:#eee;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:1.5rem 1rem;box-sizing:border-box;}"
@@ -289,9 +288,11 @@ void handleIndex() {
     "load(); setInterval(load, 1000);"
     "</script></body></html>"
   ));
+  response->addHeader(F("Cache-Control"), F("public, max-age=3600"));
+  request->send(response);
 }
 
-void handleApiState() {
+void handleApiState(AsyncWebServerRequest *request) {
   String json = "{\"auto\":";
   json += automationOn ? "1" : "0";
   json += ",\"r\":"; json += manual_r;
@@ -300,96 +301,95 @@ void handleApiState() {
   json += ",\"w\":"; json += manual_w;
   json += ",\"night\":"; json += isNightMode(g_lastNtpTime) ? "1" : "0";
   json += "}";
-  server.sendHeader(F("Cache-Control"), F("no-store"));
-  server.send(200, F("application/json"), json);
+  AsyncWebServerResponse *response = request->beginResponse(200, F("application/json"), json);
+  response->addHeader(F("Cache-Control"), F("no-store"));
+  request->send(response);
 }
 
-void handleApiAuto() {
-  if (server.method() != HTTP_POST) { server.send(405, F("text/plain"), F("Method Not Allowed")); return; }
-  if (server.hasArg(F("on"))) {
-    automationOn = (server.arg(F("on")).toInt() != 0);
+void handleApiAuto(AsyncWebServerRequest *request) {
+  if (request->hasParam(F("on"), true)) {
+    automationOn = (request->getParam(F("on"), true)->value().toInt() != 0);
     if (!automationOn) applyManualColor();
     else { setAll(0, 0, 0, 0); strip.show(); }
   }
-  server.send(204);
+  request->send(204);
 }
 
-void handleApiColor() {
-  if (server.method() != HTTP_POST) { server.send(405, F("text/plain"), F("Method Not Allowed")); return; }
-  // Set or adjust all channels (0–100): all=<value> or all=1&a=minus10|minus1|plus1|plus10
-  if (server.hasArg(F("all"))) {
+void handleApiColor(AsyncWebServerRequest *request) {
+  if (request->hasParam(F("all"), true)) {
     int pct;
-    if (server.hasArg(F("a"))) {
-      String ax = server.arg(F("a"));
+    if (request->hasParam(F("a"), true)) {
+      String ax = request->getParam(F("a"), true)->value();
       int cur = (int)manual_r;
       if (ax == F("minus10")) pct = cur - 10;
       else if (ax == F("minus1")) pct = cur - 1;
       else if (ax == F("plus1")) pct = cur + 1;
       else if (ax == F("plus10")) pct = cur + 10;
-      else { server.send(400, F("text/plain"), F("a=minus10|minus1|plus1|plus10")); return; }
+      else { request->send(400, F("text/plain"), F("a=minus10|minus1|plus1|plus10")); return; }
       if (pct < 0) pct = 0;
       if (pct > 100) pct = 100;
     } else {
-      pct = server.arg(F("all")).toInt();
+      pct = request->getParam(F("all"), true)->value().toInt();
       if (pct < 0) pct = 0;
       if (pct > 100) pct = 100;
     }
     manual_r = manual_g = manual_b = manual_w = (uint8_t)pct;
     if (!automationOn) applyManualColor();
-    server.send(204);
+    request->send(204);
     return;
   }
-  if (!server.hasArg(F("c")) || !server.hasArg(F("a"))) { server.send(400, F("text/plain"), F("c and a required")); return; }
-  String c = server.arg(F("c"));
-  String a = server.arg(F("a"));
+  // Direct value set: c=<channel>&v=<0-100> (used by sliders in Phase 2)
+  if (request->hasParam(F("c"), true) && request->hasParam(F("v"), true)) {
+    String c = request->getParam(F("c"), true)->value();
+    int val = request->getParam(F("v"), true)->value().toInt();
+    if (val < 0) val = 0;
+    if (val > 100) val = 100;
+    uint8_t* target = nullptr;
+    if (c == F("r")) target = &manual_r;
+    else if (c == F("g")) target = &manual_g;
+    else if (c == F("b")) target = &manual_b;
+    else if (c == F("w")) target = &manual_w;
+    if (!target) { request->send(400, F("text/plain"), F("c=r|g|b|w")); return; }
+    *target = (uint8_t)val;
+    if (!automationOn) applyManualColor();
+    request->send(204);
+    return;
+  }
+  // Step adjust: c=<channel>&a=minus|plus|toggle
+  if (!request->hasParam(F("c"), true) || !request->hasParam(F("a"), true)) {
+    request->send(400, F("text/plain"), F("c and a (or v) required"));
+    return;
+  }
+  String c = request->getParam(F("c"), true)->value();
+  String a = request->getParam(F("a"), true)->value();
   uint8_t* v = nullptr;
   if (c == F("r")) v = &manual_r; else if (c == F("g")) v = &manual_g; else if (c == F("b")) v = &manual_b; else if (c == F("w")) v = &manual_w;
-  if (!v) { server.send(400, F("text/plain"), F("c=r|g|b|w")); return; }
+  if (!v) { request->send(400, F("text/plain"), F("c=r|g|b|w")); return; }
   if (a == F("minus")) { *v = (*v <= 10) ? 0 : (*v - 10); }
   else if (a == F("plus"))  { *v = (*v >= 90) ? 100 : (*v + 10); }
   else if (a == F("toggle")) { *v = (*v > 0) ? 0 : 50; }
   if (!automationOn) applyManualColor();
-  server.send(204);
+  request->send(204);
 }
 
-void handleApiAlloff() {
-  if (server.method() != HTTP_POST) { server.send(405, F("text/plain"), F("Method Not Allowed")); return; }
+void handleApiAlloff(AsyncWebServerRequest *request) {
   manual_r = manual_g = manual_b = manual_w = 0;
   setAll(0, 0, 0, 0);
   strip.show();
-  server.send(204);
+  request->send(204);
 }
 
 // Play animation for 10 s (1–5 as below, 6=night red breathing)
-void handleApiPlay() {
-  if (server.method() != HTTP_POST) { server.send(405, F("text/plain"), F("Method Not Allowed")); return; }
-  if (!server.hasArg(F("anim"))) { server.send(400, F("text/plain"), F("anim=1..6")); return; }
-  int anim = server.arg(F("anim")).toInt();
-  if (anim < 1 || anim > 6) { server.send(400, F("text/plain"), F("anim 1..6")); return; }
-
-  if (anim == 6) {
-    g_animDurationOverrideMs = 10000;
-    nightAnimation("UP");
-    g_animDurationOverrideMs = 0;
-    setAll(0, 0, 0, 0);
-    strip.show();
-    server.send(204);
-    return;
-  }
-
-  g_animDurationOverrideMs = 10000;
-  if (anim == 1) simpleFadeToRandom(F("UP"));
-  else if (anim == 2) rainbowSteps(F("UP"));
-  else if (anim == 3) FadeToFullBrightness(F("UP"));
-  else if (anim == 4) starSparkle(F("UP"));
-  else if (anim == 5) birthday(F("UP"));
-  g_animDurationOverrideMs = 0;
-  server.send(204);
+void handleApiPlay(AsyncWebServerRequest *request) {
+  if (!request->hasParam(F("anim"), true)) { request->send(400, F("text/plain"), F("anim=1..6")); return; }
+  int anim = request->getParam(F("anim"), true)->value().toInt();
+  if (anim < 1 || anim > 6) { request->send(400, F("text/plain"), F("anim 1..6")); return; }
+  g_pendingPlayAnim = anim;
+  request->send(204);
 }
 
 // GET /api/time – JSON with date, time, uptime_ms, last_reboot (local, from NTP) for Web UI
-void handleApiTime() {
-  server.sendHeader(F("Cache-Control"), F("no-store"));
+void handleApiTime(AsyncWebServerRequest *request) {
   String json = "{\"date\":\"";
   if (g_lastNtpTime <= 0) {
     json += "--\",\"time\":\"--\"";
@@ -426,21 +426,19 @@ void handleApiTime() {
       json += "\"}";
     }
   }
-  server.send(200, F("application/json"), json);
+  AsyncWebServerResponse *response = request->beginResponse(200, F("application/json"), json);
+  response->addHeader(F("Cache-Control"), F("no-store"));
+  request->send(response);
 }
 
 // POST /api/reboot – reboot ESP (send 204 then restart after short delay)
-void handleApiReboot() {
-  if (server.method() != HTTP_POST) { server.send(405, F("text/plain"), F("Method Not Allowed")); return; }
-  server.send(204);
-  server.handleClient();
-  delay(300);
-  ESP.restart();
+void handleApiReboot(AsyncWebServerRequest *request) {
+  g_pendingReboot = true;
+  request->send(204);
 }
 
 // GET /api/log – JSON array of last 5 motions: { dir, anim, time } (newest first)
-void handleApiLog() {
-  server.sendHeader(F("Cache-Control"), F("no-store"));
+void handleApiLog(AsyncWebServerRequest *request) {
   String json = "[";
   const char* animNames[] = { "", "Random fade", "Rainbow", "White ramp", "Star sparkle", "Birthday" };
   for (uint8_t i = 0; i < motionLogCount; i++) {
@@ -463,15 +461,16 @@ void handleApiLog() {
     json += "\"}";
   }
   json += "]";
-  server.send(200, F("application/json"), json);
+  AsyncWebServerResponse *response = request->beginResponse(200, F("application/json"), json);
+  response->addHeader(F("Cache-Control"), F("no-store"));
+  request->send(response);
 }
 
 // GET /api/memory – JSON with heap/flash stats (total, used, %) for Web UI status table
 #ifndef ESP8266_HEAP_TOTAL
 #define ESP8266_HEAP_TOTAL 80192u  // typical user heap on NodeMCU/ESP-12
 #endif
-void handleApiMemory() {
-  server.sendHeader(F("Cache-Control"), F("no-store"));
+void handleApiMemory(AsyncWebServerRequest *request) {
   uint32_t heapFree = ESP.getFreeHeap();
   uint32_t heapTotal = ESP8266_HEAP_TOTAL;
   uint32_t heapUsed = (heapTotal > heapFree) ? (heapTotal - heapFree) : 0;
@@ -514,7 +513,9 @@ void handleApiMemory() {
   json += ",\"sketch_free\":";
   json += sketchFree;
   json += "}";
-  server.send(200, F("application/json"), json);
+  AsyncWebServerResponse *response = request->beginResponse(200, F("application/json"), json);
+  response->addHeader(F("Cache-Control"), F("no-store"));
+  request->send(response);
 }
 
 // Returns true if current date (local, NTP + CET/CEST offset) is listed in birthdays.h.
@@ -533,8 +534,7 @@ bool isBirthdayToday(long unixTimeUtc) {
 }
 
 // GET /api/sysinfo – CPU freq, reset reason/exception, WiFi details, reconnect counter
-void handleApiSysinfo() {
-  server.sendHeader(F("Cache-Control"), F("no-store"));
+void handleApiSysinfo(AsyncWebServerRequest *request) {
   // Sanitise reset_info: replace " so it doesn't break the JSON string
   String ri = s_resetInfo;
   ri.replace("\"", "'");
@@ -551,7 +551,9 @@ void handleApiSysinfo() {
   json += ",\"channel\":";        json += WiFi.channel();
   json += ",\"reconnects\":";     json += g_wifiReconnectCount;
   json += "}";
-  server.send(200, F("application/json"), json);
+  AsyncWebServerResponse *response = request->beginResponse(200, F("application/json"), json);
+  response->addHeader(F("Cache-Control"), F("no-store"));
+  request->send(response);
 }
 
 bool isNightMode(long unixTimeUtc) {
