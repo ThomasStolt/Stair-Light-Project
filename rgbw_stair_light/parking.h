@@ -1,5 +1,3 @@
-#include <ArduinoOTA.h>
-
 extern uint32_t g_animDurationOverrideMs;  // if >0: duration for animation (e.g. 10000 = 10 s "Go")
 
 // ===================================================================================
@@ -117,7 +115,6 @@ void fadeInSingleStep(int step_number, int fade_time_ms, int red, int green, int
       yield();
     }
     strip.show();
-    handleNetwork();
     yield();
   }
   delay(10);
@@ -154,7 +151,6 @@ void fadeOutSingleStep(int step_number, int fade_time_ms, int red, int green, in
       yield();
     }
     strip.show();
-    handleNetwork();
     yield();
   }
   delay(10);
@@ -180,7 +176,6 @@ void FadeToFullBrightness(String dir){
       fadeInSingleStep(i, 100, 255, 255, 255, 255);
     }
     while ( millis() - s_timer < limit ) {
-      handleNetwork();
       delay(100);
       yield();
     }
@@ -194,7 +189,6 @@ void FadeToFullBrightness(String dir){
       fadeInSingleStep(i, 100, 255, 255, 255, 255);
     }
     while ( millis() - s_timer < limit ) {
-      handleNetwork();
       delay(100);
       yield();
     }
@@ -225,7 +219,6 @@ void starSparkle(String dir){
     Serial.println("Moving up the stairs");
     for ( i = 1; i <= STEPS; i++ ) { fadeInSingleStep(i, 75, 0, 0, blue, 0); }
     while ( millis() - s_timer < limit ) {
-      handleNetwork();
       for ( i = 1; i < random(minStars,maxStars); i++) {
         strip.setPixelColor(random(0,NUM_LEDS), 255, 255, 255, 255);
       }
@@ -239,7 +232,6 @@ void starSparkle(String dir){
     Serial.println("Moving down the stairs");
     for ( i = STEPS; i >= 1; i-- ) { fadeInSingleStep(i, 75, 0, 0, blue, 0); }
     while ( millis() - s_timer < limit ) {
-      handleNetwork();
       for ( i = 1; i < random(minStars,maxStars); i++) {
         strip.setPixelColor(random(0, NUM_LEDS), 255, 255, 255, 255);
       }
@@ -278,7 +270,6 @@ void simpleFadeToRandom(String dir){
       fadeInSingleStep(i, 100, red, green, blue, white);
     }
     while ( millis() - s_timer < limit ) {
-      handleNetwork();
       delay(100);
       yield();
     }
@@ -292,7 +283,6 @@ void simpleFadeToRandom(String dir){
       fadeInSingleStep(i, 100, red, green, blue, white);
     }
     while ( millis() - s_timer < limit ) {
-      handleNetwork();
       delay(100);
       yield();
     }
@@ -355,7 +345,6 @@ void rainbowSteps(String dir){
       for (int p = sp; p < sp+WIDTH; p++)
         strip.setPixelColor(p, strip.Color(r, g, b, 0));
       strip.show();
-      handleNetwork();
       yield();
     }
   };
@@ -367,7 +356,6 @@ void rainbowSteps(String dir){
     for (k = 0; k < 2; k++) {
       for (int i = 0; i < 256; i += 2) {
         if (millis() - s_timer > limit) { timed_out = true; break; }
-        handleNetwork();
         for (j = 1; j <= STEPS; j++) setStep(j, Wheel(byte(i + (j-1)*255/STEPS)));
         strip.show();
         yield();
@@ -382,7 +370,6 @@ void rainbowSteps(String dir){
     for (k = 0; k < 2; k++) {
       for (int i = 256; i > 0; i--) {
         if (millis() - s_timer > limit) { timed_out = true; break; }
-        handleNetwork();
         for (j = 1; j <= STEPS; j++) setStep(j, Wheel(byte(i + (j-1)*255/STEPS)));
         strip.show();
         yield();
@@ -426,7 +413,6 @@ void birthday(String dir) {
   uint32_t limit = (g_animDurationOverrideMs != 0) ? g_animDurationOverrideMs : (uint32_t)ANIM_DURATION;
   int s;
   while ( (unsigned long)(c_timer - s_timer) < limit ) {
-    handleNetwork();
     for (s=1;s<=STEPS;s++) {
       setStepRndm(s, 1);
       c_timer = millis();
@@ -471,13 +457,11 @@ void nightAnimation(String dir) {
         strip.setPixelColor(j, pix, 0, 0, 0);
     }
     strip.show();
-    handleNetwork();
     yield();
   }
 
   // Hold
   while (millis() - s_timer < limit) {
-    handleNetwork();
     delay(100);
     yield();
   }
@@ -496,7 +480,6 @@ void nightAnimation(String dir) {
         strip.setPixelColor(j, pix, 0, 0, 0);
     }
     strip.show();
-    handleNetwork();
     yield();
   }
 

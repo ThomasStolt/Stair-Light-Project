@@ -31,7 +31,8 @@
 #include <WiFiClient.h>
 #include <ESP8266WiFiMulti.h>
 #include <ESP8266mDNS.h>
-#include <ESP8266WebServer.h>
+#include <ESPAsyncTCP.h>
+#include <ESPAsyncWebServer.h>
 #include <ArduinoOTA.h>
 #include <EasyNTPClient.h>
 #include <WiFiUdp.h>
@@ -89,7 +90,7 @@ static long timezoneOffsetSec(long utc) {
 #define DEBUG 1   // 1 = Serial monitor shows PIR state and trigger
 
 ESP8266WiFiMulti WiFiMulti;
-ESP8266WebServer server(80);
+AsyncWebServer server(80);
 
 // Web control: stair automation and manual colour (0–100% per channel)
 bool automationOn = true;   // Start: automation on (can be turned off via web)
@@ -97,6 +98,10 @@ uint8_t manual_r = 0, manual_g = 0, manual_b = 0, manual_w = 0;  // 0–100 %
 
 // If > 0: animations (e.g. web "Go") run only for this duration (ms), else ANIM_DURATION
 uint32_t g_animDurationOverrideMs = 0;
+
+// Flags set by async web handlers, consumed by loop()
+volatile int g_pendingPlayAnim = 0;   // 0 = none, 1-6 = animation to play
+volatile bool g_pendingReboot = false;
 
 // Last NTP time (UTC) from main loop; used by /api/time for Web UI date/time display
 volatile long g_lastNtpTime = 0;
@@ -160,15 +165,7 @@ int gammaw[] = {
 #define NIGHT_BRIGHTNESS_MAX  50  // max red value during night (≈ 20%)
 #define NIGHT_BRIGHTNESS_MIN  10  // min red value (never fully off)
 
-// Called in animations and wait loops so OTA and web server stay responsive during animation
-void handleNetwork(void);
-
 #include "parking.h"
-
-void handleNetwork(void) {
-  ArduinoOTA.handle();
-  server.handleClient();
-}
 
 WiFiUDP udp;
 EasyNTPClient ntpClient(udp, "pool.ntp.org", ((0*60*60)+(0*60))); // CET = GMT + 1:00
@@ -729,7 +726,7 @@ void loop() {
   static int lastAnimation = 0;      // 0 = none yet, 1–4 = last chosen animation (no repeat)
   static bool wasNightMode = false;
   while (true) {
-    handleNetwork();
+    ArduinoOTA.handle();
     watchdogCount = 0;
     bool night = isNightMode(currenttime);
 
@@ -775,7 +772,7 @@ void loop() {
       addMotionLog(dir.c_str(), 6);
       nightAnimation(dir);
       for (unsigned long t = millis(); millis() - t < (unsigned long)POST_ANIM_DELAY_MS; ) {
-        handleNetwork();
+        ArduinoOTA.handle();
         delay(100);
       }
     } else if (!night && automationOn && dir != "") {
@@ -787,7 +784,7 @@ void loop() {
         birthday(dir);
         // 10 s delay after birthday animation (same as others)
         for (unsigned long t = millis(); millis() - t < (unsigned long)POST_ANIM_DELAY_MS; ) {
-          handleNetwork();
+          ArduinoOTA.handle();
           delay(100);
         }
       } else {
@@ -815,7 +812,7 @@ void loop() {
         }
         // 10 s delay after animation (OTA and web stay available)
         for (unsigned long t = millis(); millis() - t < (unsigned long)POST_ANIM_DELAY_MS; ) {
-          handleNetwork();
+          ArduinoOTA.handle();
           delay(100);
         }
       }
