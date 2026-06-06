@@ -39,6 +39,7 @@
 #include "credentials.h"
 #include "birthdays.h"
 #include <Ticker.h>
+#include <EEPROM.h>
 #include <time.h>
 
 #ifdef __AVR__
@@ -166,6 +167,43 @@ int gammaw[] = {
 #define NIGHT_BRIGHTNESS_MIN  10  // min red value (never fully off)
 
 #include "parking.h"
+
+// ---- Persistent settings (EEPROM emulation) -------------------------------
+// A small versioned struct. On first boot / blank flash / version change we
+// fall back to the compiled-in defaults and re-save. The struct fields are the
+// runtime config (read directly elsewhere) – no separate shadow globals.
+#define SETTINGS_MAGIC   0x53544C31u  // 'STL1'
+#define SETTINGS_VERSION 1
+struct Settings {
+  uint32_t magic;
+  uint8_t  version;
+  char     hostname[32];   // null-terminated, <=31 chars
+  bool     nightEnabled;
+  uint8_t  nightStart;     // hour 0–23 (inclusive)
+  uint8_t  nightEnd;       // hour 0–23 (exclusive)
+};
+Settings g_settings;
+
+void saveSettings() {
+  EEPROM.put(0, g_settings);
+  EEPROM.commit();
+}
+
+void loadSettings() {
+  EEPROM.begin(sizeof(Settings));
+  EEPROM.get(0, g_settings);
+  if (g_settings.magic != SETTINGS_MAGIC || g_settings.version != SETTINGS_VERSION) {
+    // First boot / blank / version mismatch → compiled defaults
+    g_settings.magic   = SETTINGS_MAGIC;
+    g_settings.version = SETTINGS_VERSION;
+    strncpy(g_settings.hostname, OTA_HOSTNAME, sizeof(g_settings.hostname) - 1);
+    g_settings.hostname[sizeof(g_settings.hostname) - 1] = '\0';
+    g_settings.nightEnabled = true;
+    g_settings.nightStart   = NIGHT_HOUR_START;
+    g_settings.nightEnd     = NIGHT_HOUR_END;
+    saveSettings();
+  }
+}
 
 WiFiUDP udp;
 EasyNTPClient ntpClient(udp, "pool.ntp.org", ((0*60*60)+(0*60))); // CET = GMT + 1:00
@@ -641,6 +679,9 @@ void setup() {
   // Cache reset reason/info before WiFi stack overwrites them
   s_resetReason = ESP.getResetReason();
   s_resetInfo   = ESP.getResetInfo();
+
+  // Load persisted settings (hostname, night mode) – falls back to defaults
+  loadSettings();
 
   // Count WiFi re-connects (skip the very first connection at boot)
   g_wifiReconnectHandler = WiFi.onStationModeConnected([](const WiFiEventStationModeConnected&) {
