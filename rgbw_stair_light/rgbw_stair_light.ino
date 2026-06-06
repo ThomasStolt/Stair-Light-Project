@@ -832,7 +832,16 @@ void handleApiBirthdaysPost(AsyncWebServerRequest *request) {
   if (!request->hasParam(F("count"), true)) {
     request->send(400, F("text/plain"), F("count required")); return;
   }
-  int count = request->getParam(F("count"), true)->value().toInt();
+  String countStr = request->getParam(F("count"), true)->value();
+  if (countStr.length() == 0) {
+    request->send(400, F("text/plain"), F("count must be a number")); return;
+  }
+  for (size_t k = 0; k < countStr.length(); k++) {
+    if (countStr[k] < '0' || countStr[k] > '9') {
+      request->send(400, F("text/plain"), F("count must be a number")); return;
+    }
+  }
+  int count = countStr.toInt();
   if (count < 0 || count > BIRTHDAYS_MAX) {
     request->send(400, F("text/plain"), F("count 0..20")); return;
   }
