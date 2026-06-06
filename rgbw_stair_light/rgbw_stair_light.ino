@@ -675,6 +675,57 @@ void handleApiSysinfo(AsyncWebServerRequest *request) {
   request->send(response);
 }
 
+// GET /api/settings – current configurable settings for the web UI
+void handleApiSettingsGet(AsyncWebServerRequest *request) {
+  String hn = g_settings.hostname;
+  hn.replace("\"", "'");   // keep JSON valid
+  String json = "{\"hostname\":\"";
+  json += hn;
+  json += "\",\"night_enabled\":";
+  json += g_settings.nightEnabled ? "1" : "0";
+  json += ",\"night_start\":";
+  json += g_settings.nightStart;
+  json += ",\"night_end\":";
+  json += g_settings.nightEnd;
+  json += "}";
+  AsyncWebServerResponse *response = request->beginResponse(200, F("application/json"), json);
+  response->addHeader(F("Cache-Control"), F("no-store"));
+  request->send(response);
+}
+
+// POST /api/settings – update any of hostname / night_enabled / night_start / night_end
+void handleApiSettingsPost(AsyncWebServerRequest *request) {
+  bool changed = false;
+  if (request->hasParam(F("hostname"), true)) {
+    String hn = request->getParam(F("hostname"), true)->value();
+    hn.trim();
+    if (hn.length() == 0 || hn.length() > 31) {
+      request->send(400, F("text/plain"), F("hostname 1..31 chars")); return;
+    }
+    strncpy(g_settings.hostname, hn.c_str(), sizeof(g_settings.hostname) - 1);
+    g_settings.hostname[sizeof(g_settings.hostname) - 1] = '\0';
+    changed = true;
+  }
+  if (request->hasParam(F("night_enabled"), true)) {
+    g_settings.nightEnabled = (request->getParam(F("night_enabled"), true)->value().toInt() != 0);
+    changed = true;
+  }
+  if (request->hasParam(F("night_start"), true)) {
+    int v = request->getParam(F("night_start"), true)->value().toInt();
+    if (v < 0 || v > 23) { request->send(400, F("text/plain"), F("night_start 0..23")); return; }
+    g_settings.nightStart = (uint8_t)v;
+    changed = true;
+  }
+  if (request->hasParam(F("night_end"), true)) {
+    int v = request->getParam(F("night_end"), true)->value().toInt();
+    if (v < 0 || v > 23) { request->send(400, F("text/plain"), F("night_end 0..23")); return; }
+    g_settings.nightEnd = (uint8_t)v;
+    changed = true;
+  }
+  if (changed) saveSettings();
+  request->send(204);
+}
+
 bool isNightMode(long unixTimeUtc) {
   if (!g_settings.nightEnabled) return false;
   if (unixTimeUtc <= 0) return false;
@@ -861,6 +912,8 @@ void setup() {
   server.on("/api/log", HTTP_GET, handleApiLog);
   server.on("/api/memory", HTTP_GET, handleApiMemory);
   server.on("/api/sysinfo", HTTP_GET, handleApiSysinfo);
+  server.on("/api/settings", HTTP_GET,  handleApiSettingsGet);
+  server.on("/api/settings", HTTP_POST, handleApiSettingsPost);
   server.onNotFound([](AsyncWebServerRequest *request) { request->send(404, F("text/plain"), F("Not Found")); });
   server.begin();
 #if DEBUG
