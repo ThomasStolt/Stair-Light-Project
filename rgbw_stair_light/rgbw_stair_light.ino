@@ -196,7 +196,7 @@ struct Settings {
 Settings g_settings;
 
 void saveSettings() {
-  EEPROM.begin(EEPROM_SIZE);   // idempotent; makes saveSettings() safe to call standalone
+  EEPROM.begin(EEPROM_SIZE);   // begin re-reads flash into RAM; keep begin→put→commit as a unit
   EEPROM.put(0, g_settings);
   EEPROM.commit();
 }
