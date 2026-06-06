@@ -396,7 +396,7 @@ void handleIndex(AsyncWebServerRequest *request) {
     "});"
     "document.getElementById('autoOn').onclick=function(){post('/api/auto','on=1').then(loadFast);};"
     "document.getElementById('autoOff').onclick=function(){post('/api/auto','on=0').then(loadFast);};"
-    "document.querySelectorAll('.preset').forEach(function(btn){btn.onclick=function(){post('/api/color','all='+btn.getAttribute('data-all')).then(loadFast);};});"
+    "document.querySelectorAll('.preset[data-all]').forEach(function(btn){btn.onclick=function(){post('/api/color','all='+btn.getAttribute('data-all')).then(loadFast);};});"
     "document.querySelectorAll('.anim-btn').forEach(function(btn){btn.onclick=function(){post('/api/play','anim='+btn.getAttribute('data-anim'));};});"
     "document.getElementById('rebootBtn').onclick=function(){this.disabled=true;this.textContent='Rebooting...';post('/api/reboot').then(function(){setTimeout(function(){location.reload();},4000);});};"
     "function loadSettings(){"
