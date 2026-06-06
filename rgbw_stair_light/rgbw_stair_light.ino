@@ -185,6 +185,7 @@ struct Settings {
 Settings g_settings;
 
 void saveSettings() {
+  EEPROM.begin(sizeof(Settings));   // idempotent; makes saveSettings() safe to call standalone
   EEPROM.put(0, g_settings);
   EEPROM.commit();
 }
