@@ -489,6 +489,24 @@ void handleApiPlay(AsyncWebServerRequest *request) {
   request->send(204);
 }
 
+// POST /api/ext – external process drives the strip directly.
+// state = red | red_blink | green_fade | clear  (suppresses motion while active)
+void handleApiExt(AsyncWebServerRequest *request) {
+  if (!request->hasParam(F("state"), true)) {
+    request->send(400, F("text/plain"), F("state=red|red_blink|green_fade|clear"));
+    return;
+  }
+  String s = request->getParam(F("state"), true)->value();
+  int cmd = 0;
+  if      (s == F("red"))        cmd = 1;
+  else if (s == F("red_blink"))  cmd = 2;
+  else if (s == F("green_fade")) cmd = 3;
+  else if (s == F("clear"))      cmd = 4;
+  else { request->send(400, F("text/plain"), F("state=red|red_blink|green_fade|clear")); return; }
+  g_pendingExtCmd = cmd;
+  request->send(204);
+}
+
 // GET /api/time – JSON with date, time, uptime_ms, last_reboot (local, from NTP) for Web UI
 void handleApiTime(AsyncWebServerRequest *request) {
   String json = "{\"date\":\"";
@@ -837,6 +855,7 @@ void setup() {
   server.on("/api/color", HTTP_POST, handleApiColor);
   server.on("/api/alloff", HTTP_POST, handleApiAlloff);
   server.on("/api/play", HTTP_POST, handleApiPlay);
+  server.on("/api/ext", HTTP_POST, handleApiExt);
   server.on("/api/time", HTTP_GET, handleApiTime);
   server.on("/api/reboot", HTTP_POST, handleApiReboot);
   server.on("/api/log", HTTP_GET, handleApiLog);
