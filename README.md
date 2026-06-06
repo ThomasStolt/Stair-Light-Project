@@ -190,7 +190,7 @@ detection — e.g. a parking/garage helper signalling stop/go.
 `POST /api/ext` with form field `state`:
 
 | `state`      | Effect                                                        |
-|--------------|--------------------------------------------------------------|
+|--------------|---------------------------------------------------------------|
 | `red`        | Solid red, held until the next command                        |
 | `red_blink`  | Red blinking every 500 ms                                     |
 | `green_fade` | Green dimming from full to off over ~30 s, then auto-clears   |
@@ -225,7 +225,7 @@ In **`rgbw_stair_light/rgbw_stair_light.ino`** (and `parking.h`):
 | `BRIGHTNESS` | LED brightness 0–255 | 255 |
 | `DEBUG` | 1 = PIR/trigger on serial monitor | 1 |
 | `TIMEZONE_OFFSET_SEC` | Seconds UTC→local (e.g. 3600 for CET) | 3600 |
-| `FW_VERSION` | Firmware version string shown in web UI | "1.0.0" |
+| `FW_VERSION` | Firmware version string shown in web UI | "2.1.0" |
 | `NIGHT_HOUR_START` / `NIGHT_HOUR_END` | Night mode from hour … to (excl.) | 1, 6 |
 | `NIGHT_BRIGHTNESS_MAX` / `NIGHT_BRIGHTNESS_MIN` | Red in night mode max/min (0–255) | 50, 10 |
 
