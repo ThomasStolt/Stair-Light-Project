@@ -809,6 +809,69 @@ void handleApiSettingsPost(AsyncWebServerRequest *request) {
   request->send(204);
 }
 
+// GET /api/birthdays – JSON array of {m,d,name} for the Web UI
+void handleApiBirthdaysGet(AsyncWebServerRequest *request) {
+  String json = "[";
+  for (uint8_t i = 0; i < g_birthdays.count; i++) {
+    if (i > 0) json += ",";
+    String nm = g_birthdays.items[i].name;
+    nm.replace("\"", "'");
+    json += "{\"m\":"; json += g_birthdays.items[i].month;
+    json += ",\"d\":"; json += g_birthdays.items[i].day;
+    json += ",\"name\":\""; json += nm; json += "\"}";
+  }
+  json += "]";
+  AsyncWebServerResponse *response = request->beginResponse(200, F("application/json"), json);
+  response->addHeader(F("Cache-Control"), F("no-store"));
+  request->send(response);
+}
+
+// POST /api/birthdays – replace the whole list.
+// Body (form-encoded): count=N then for i in 0..N-1: m<i>, d<i>, n<i>
+void handleApiBirthdaysPost(AsyncWebServerRequest *request) {
+  if (!request->hasParam(F("count"), true)) {
+    request->send(400, F("text/plain"), F("count required")); return;
+  }
+  int count = request->getParam(F("count"), true)->value().toInt();
+  if (count < 0 || count > BIRTHDAYS_MAX) {
+    request->send(400, F("text/plain"), F("count 0..20")); return;
+  }
+  // Build into a static temp; only commit to g_birthdays after all entries validate
+  // (no partial write). static avoids ~450 B on the async callback stack.
+  static BirthdayStore tmp;
+  tmp.magic   = BIRTHDAYS_MAGIC;
+  tmp.version = BIRTHDAYS_VERSION;
+  tmp.count   = (uint8_t)count;
+  for (int i = 0; i < count; i++) {
+    String mi = String("m") + i, di = String("d") + i, ni = String("n") + i;
+    if (!request->hasParam(mi, true) || !request->hasParam(di, true)) {
+      request->send(400, F("text/plain"), F("missing m/d for an entry")); return;
+    }
+    int m = request->getParam(mi, true)->value().toInt();
+    int d = request->getParam(di, true)->value().toInt();
+    if (m < 1 || m > 12) { request->send(400, F("text/plain"), F("month 1..12")); return; }
+    if (d < 1 || d > 31) { request->send(400, F("text/plain"), F("day 1..31")); return; }
+    String nm = request->hasParam(ni, true) ? request->getParam(ni, true)->value() : String("");
+    nm.trim();
+    if (nm.length() > BIRTHDAY_NAME_LEN - 1) {
+      request->send(400, F("text/plain"), F("name too long (max 19)")); return;
+    }
+    for (size_t k = 0; k < nm.length(); k++) {
+      char c = nm[k];
+      bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                (c >= '0' && c <= '9') || c == ' ' || c == '-' || c == '_' || c == '.';
+      if (!ok) { request->send(400, F("text/plain"), F("name: letters/digits/space/-_. only")); return; }
+    }
+    tmp.items[i].month = (uint8_t)m;
+    tmp.items[i].day   = (uint8_t)d;
+    strncpy(tmp.items[i].name, nm.c_str(), BIRTHDAY_NAME_LEN - 1);
+    tmp.items[i].name[BIRTHDAY_NAME_LEN - 1] = '\0';
+  }
+  g_birthdays = tmp;
+  saveBirthdays();
+  request->send(204);
+}
+
 bool isNightMode(long unixTimeUtc) {
   if (!g_settings.nightEnabled) return false;
   if (unixTimeUtc <= 0) return false;
@@ -998,6 +1061,8 @@ void setup() {
   server.on("/api/sysinfo", HTTP_GET, handleApiSysinfo);
   server.on("/api/settings", HTTP_GET,  handleApiSettingsGet);
   server.on("/api/settings", HTTP_POST, handleApiSettingsPost);
+  server.on("/api/birthdays", HTTP_GET,  handleApiBirthdaysGet);
+  server.on("/api/birthdays", HTTP_POST, handleApiBirthdaysPost);
   server.onNotFound([](AsyncWebServerRequest *request) { request->send(404, F("text/plain"), F("Not Found")); });
   server.begin();
 #if DEBUG
