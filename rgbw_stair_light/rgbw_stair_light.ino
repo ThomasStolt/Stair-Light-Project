@@ -648,12 +648,13 @@ void handleApiSysinfo(AsyncWebServerRequest *request) {
 }
 
 bool isNightMode(long unixTimeUtc) {
+  if (!g_settings.nightEnabled) return false;
   if (unixTimeUtc <= 0) return false;
   time_t t = (time_t)(unixTimeUtc + TIMEZONE_OFFSET_SEC(unixTimeUtc));
   struct tm *tm = gmtime(&t);
   if (!tm) return false;
   int hour = tm->tm_hour;
-  return (hour >= NIGHT_HOUR_START && hour < NIGHT_HOUR_END);
+  return (hour >= g_settings.nightStart && hour < g_settings.nightEnd);
 }
 
 // Soft red "breathing" (min → max → min), cycle ~10 s; never fully off
@@ -709,6 +710,8 @@ void setup() {
   // ========================================================================================
   // WiFi: SSID and password from credentials.h (in .gitignore).
   // ========================================================================================
+  // Register our name on the network (DHCP) using the persisted hostname
+  WiFi.hostname(g_settings.hostname);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   Serial.print("Connecting");
   const unsigned long wifiTimeout = 10000;  // 10 s, then continue without WiFi (test bed)
@@ -740,7 +743,7 @@ void setup() {
   // OTA: you push new firmware from Cursor/PC (arduino-cli upload -p <ESP-IP>).
   // ESP does not fetch anything from a server by itself.
   if (WiFi.status() == WL_CONNECTED) {
-    ArduinoOTA.setHostname(OTA_HOSTNAME);
+    ArduinoOTA.setHostname(g_settings.hostname);
     ArduinoOTA.onStart([]() {
       Serial.printf("OTA start – free heap: %u bytes\n", ESP.getFreeHeap());
     });
