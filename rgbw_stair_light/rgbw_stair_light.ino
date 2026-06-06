@@ -702,6 +702,12 @@ void handleApiSettingsPost(AsyncWebServerRequest *request) {
     if (hn.length() == 0 || hn.length() > 31) {
       request->send(400, F("text/plain"), F("hostname 1..31 chars")); return;
     }
+    for (size_t i = 0; i < hn.length(); i++) {
+      char c = hn[i];
+      bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                (c >= '0' && c <= '9') || c == '-';
+      if (!ok) { request->send(400, F("text/plain"), F("hostname: A-Z a-z 0-9 - only")); return; }
+    }
     strncpy(g_settings.hostname, hn.c_str(), sizeof(g_settings.hostname) - 1);
     g_settings.hostname[sizeof(g_settings.hostname) - 1] = '\0';
     changed = true;
