@@ -104,6 +104,16 @@ uint32_t g_animDurationOverrideMs = 0;
 volatile int g_pendingPlayAnim = 0;   // 0 = none, 1-6 = animation to play
 volatile bool g_pendingReboot = false;
 
+// External control (parking/garage signalling). Web handler sets g_pendingExtCmd;
+// loop() applies it and drives the strip non-blocking while g_extActive is true.
+enum ExtMode { EXT_NONE = 0, EXT_RED, EXT_RED_BLINK, EXT_GREEN_FADE };
+volatile int  g_pendingExtCmd = 0;   // 0=none,1=red,2=red_blink,3=green_fade,4=clear
+ExtMode       g_extMode    = EXT_NONE;
+bool          g_extActive  = false;
+unsigned long g_extStartMs = 0;      // green_fade start time
+unsigned long g_extBlinkMs = 0;      // red_blink last toggle time
+bool          g_extBlinkOn = false;
+
 // Last NTP time (UTC) from main loop; used by /api/time for Web UI date/time display
 volatile long g_lastNtpTime = 0;
 // First valid NTP time after boot (for "last reboot" display in Web UI)
@@ -670,6 +680,57 @@ void updateNightRed() {
   strip.show();
 }
 
+// Apply a newly received external command (sets mode + initial strip state).
+void applyExtCommand(int cmd) {
+  unsigned long now = millis();
+  switch (cmd) {
+    case 1: // red – solid, hold
+      g_extMode = EXT_RED;  g_extActive = true;
+      setAll(255, 0, 0, 0); strip.show();
+      break;
+    case 2: // red_blink – 500 ms toggle
+      g_extMode = EXT_RED_BLINK; g_extActive = true;
+      g_extBlinkMs = now; g_extBlinkOn = true;
+      setAll(255, 0, 0, 0); strip.show();
+      break;
+    case 3: // green_fade – full→off over ~30 s, then auto-clear
+      g_extMode = EXT_GREEN_FADE; g_extActive = true;
+      g_extStartMs = now;
+      setAll(0, manualPctToGamma(100), 0, 0); strip.show();
+      break;
+    case 4: // clear – release override, LEDs off
+    default:
+      g_extMode = EXT_NONE; g_extActive = false;
+      setAll(0, 0, 0, 0); strip.show();
+      break;
+  }
+}
+
+// Per-iteration servicing of an active external command (non-blocking).
+void serviceExtControl() {
+  unsigned long now = millis();
+  if (g_extMode == EXT_RED_BLINK) {
+    if (now - g_extBlinkMs >= 500uL) {
+      g_extBlinkMs = now;
+      g_extBlinkOn = !g_extBlinkOn;
+      setAll(g_extBlinkOn ? 255 : 0, 0, 0, 0);
+      strip.show();
+    }
+  } else if (g_extMode == EXT_GREEN_FADE) {
+    unsigned long elapsed = now - g_extStartMs;
+    if (elapsed >= 30000uL) {
+      setAll(0, 0, 0, 0); strip.show();
+      g_extMode = EXT_NONE;
+      g_extActive = false;            // normal behaviour resumes next iteration
+    } else {
+      int pct = (int)((30000uL - elapsed) * 100uL / 30000uL);
+      setAll(0, manualPctToGamma((uint8_t)pct), 0, 0);
+      strip.show();
+    }
+  }
+  // EXT_RED: nothing to do per-frame (already solid)
+}
+
 void setup() {
   // Setting up the serial line
   Serial.begin(115200);
@@ -851,6 +912,18 @@ void loop() {
       g_animDurationOverrideMs = 0;
       if (!automationOn) applyManualColor();
       else { setAll(0, 0, 0, 0); strip.show(); }
+    }
+
+    // External control overrides motion detection while active
+    if (g_pendingExtCmd > 0) {
+      applyExtCommand(g_pendingExtCmd);
+      g_pendingExtCmd = 0;
+    }
+    if (g_extActive) {
+      serviceExtControl();
+      yield();
+      delay(50);
+      continue;   // skip PIR / night / day handling this iteration
     }
 
     bool night = isNightMode(currenttime);
