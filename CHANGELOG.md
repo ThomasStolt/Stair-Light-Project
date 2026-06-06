@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.0 – 2026-06-06
+
+- **External control API** – `POST /api/ext` with `state=red|red_blink|green_fade|clear` lets another LAN process drive the strip directly (solid red, 500 ms red blink, ~30 s green dim-down). Motion detection is suppressed while active; normal behaviour (or night mode) resumes after `green_fade`/`clear`.
+- **Web-configurable settings** – Hostname and night mode (enable toggle + start/end hours) are now editable in the web UI under "Settings".
+- **Persistent settings** – Hostname and night-mode settings are stored in EEPROM and survive reboot (fall back to compiled defaults on first boot). Hostname changes apply after reboot.
+- **New endpoints** – `GET`/`POST /api/settings`.
+
 ## 1.0.0 – 2026-04-04
 
 - **Night mode indicator** – Web UI shows a red badge when night mode is active (hours displayed).

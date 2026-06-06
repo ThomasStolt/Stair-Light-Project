@@ -59,6 +59,8 @@ Credentials go in **`rgbw_stair_light/credentials.h`** (gitignored).
 
 Without `credentials.h` the build fails.
 
+> The hostname can also be changed at runtime in the web UI (**Settings** section); it is stored in flash and applied on the next reboot. `OTA_HOSTNAME` in `credentials.h` is only the default used on first boot.
+
 ### 2. Birthdays (optional)
 
 On dates listed in **`rgbw_stair_light/birthdays.h`**, only the birthday animation runs.
@@ -177,6 +179,36 @@ Between **1:00 and 6:00 local time** (NTP + auto CET/CEST):
 - The web UI shows a **red "Night mode active" badge** when night mode is on.
 
 The same “Night (red breathing)” animation can be tested anytime in the web UI under **Animation (10 s)** → **Go** for 10 seconds.
+
+---
+
+## External control API
+
+Another process on the same network can drive the strip directly, bypassing motion
+detection — e.g. a parking/garage helper signalling stop/go.
+
+`POST /api/ext` with form field `state`:
+
+| `state`      | Effect                                                        |
+|--------------|--------------------------------------------------------------|
+| `red`        | Solid red, held until the next command                        |
+| `red_blink`  | Red blinking every 500 ms                                     |
+| `green_fade` | Green dimming from full to off over ~30 s, then auto-clears   |
+| `clear`      | LEDs off immediately, override released                       |
+
+While a command is active, motion detection is suppressed. After `green_fade` finishes
+(or `clear`), normal behaviour resumes — daytime automation, or night mode if within
+the configured night hours. No authentication (trusted LAN only).
+
+```bash
+curl -X POST -d state=red        http://<host>/api/ext
+curl -X POST -d state=red_blink  http://<host>/api/ext
+curl -X POST -d state=green_fade http://<host>/api/ext
+curl -X POST -d state=clear      http://<host>/api/ext
+```
+
+Night mode (enable + start/end hours) and the hostname are configurable in the web UI
+**Settings** section and persist across reboots.
 
 ---
 
