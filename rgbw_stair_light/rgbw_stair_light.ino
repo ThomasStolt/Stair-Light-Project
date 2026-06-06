@@ -881,7 +881,8 @@ void handleApiBirthdaysPost(AsyncWebServerRequest *request) {
     request->send(400, F("text/plain"), F("count 0..20")); return;
   }
   // Build into a static temp; only commit to g_birthdays after all entries validate
-  // (no partial write). static avoids ~450 B on the async callback stack.
+  // (no partial write). static avoids ~450 B on the async callback stack and is safe
+  // because ESP8266 AsyncWebServer callbacks all run in one task (no reentrancy).
   static BirthdayStore tmp;
   tmp.magic   = BIRTHDAYS_MAGIC;
   tmp.version = BIRTHDAYS_VERSION;
