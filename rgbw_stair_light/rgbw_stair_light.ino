@@ -180,6 +180,9 @@ int gammaw[] = {
 // A small versioned struct. On first boot / blank flash / version change we
 // fall back to the compiled-in defaults and re-save. The struct fields are the
 // runtime config (read directly elsewhere) – no separate shadow globals.
+// EEPROM is shared: Settings at offset 0, birthdays at a fixed offset further in.
+#define EEPROM_SIZE            1024
+#define EEPROM_BIRTHDAYS_ADDR  128   // Settings live at offset 0; leave headroom to grow
 #define SETTINGS_MAGIC   0x53544C31u  // 'STL1'
 #define SETTINGS_VERSION 1
 struct Settings {
@@ -193,13 +196,13 @@ struct Settings {
 Settings g_settings;
 
 void saveSettings() {
-  EEPROM.begin(sizeof(Settings));   // idempotent; makes saveSettings() safe to call standalone
+  EEPROM.begin(EEPROM_SIZE);   // idempotent; makes saveSettings() safe to call standalone
   EEPROM.put(0, g_settings);
   EEPROM.commit();
 }
 
 void loadSettings() {
-  EEPROM.begin(sizeof(Settings));
+  EEPROM.begin(EEPROM_SIZE);
   EEPROM.get(0, g_settings);
   if (g_settings.magic != SETTINGS_MAGIC || g_settings.version != SETTINGS_VERSION) {
     // First boot / blank / version mismatch → compiled defaults
@@ -211,6 +214,49 @@ void loadSettings() {
     g_settings.nightStart   = NIGHT_HOUR_START;
     g_settings.nightEnd     = NIGHT_HOUR_END;
     saveSettings();
+  }
+}
+
+// ---- Persistent birthdays (separate EEPROM region) ------------------------
+// Independent magic/version so it self-heals without touching the Settings
+// region. Seeded from the compile-time birthdays.h list on first boot.
+#define BIRTHDAYS_MAX     20
+#define BIRTHDAY_NAME_LEN 20            // includes null terminator (<=19 visible chars)
+#define BIRTHDAYS_MAGIC   0x53544231u   // 'STB1'
+#define BIRTHDAYS_VERSION 1
+struct BirthdayStore {
+  uint32_t magic;
+  uint8_t  version;
+  uint8_t  count;                       // 0..BIRTHDAYS_MAX
+  struct {
+    uint8_t month;                      // 1..12
+    uint8_t day;                        // 1..31
+    char    name[BIRTHDAY_NAME_LEN];    // null-terminated, may be empty
+  } items[BIRTHDAYS_MAX];
+};
+BirthdayStore g_birthdays;
+
+void saveBirthdays() {
+  EEPROM.begin(EEPROM_SIZE);
+  EEPROM.put(EEPROM_BIRTHDAYS_ADDR, g_birthdays);
+  EEPROM.commit();
+}
+
+void loadBirthdays() {
+  EEPROM.begin(EEPROM_SIZE);
+  EEPROM.get(EEPROM_BIRTHDAYS_ADDR, g_birthdays);
+  if (g_birthdays.magic != BIRTHDAYS_MAGIC || g_birthdays.version != BIRTHDAYS_VERSION) {
+    // First boot / blank / schema change → seed from compiled birthdays.h defaults
+    g_birthdays.magic   = BIRTHDAYS_MAGIC;
+    g_birthdays.version = BIRTHDAYS_VERSION;
+    uint8_t n = (BIRTHDAY_COUNT > BIRTHDAYS_MAX) ? BIRTHDAYS_MAX : (uint8_t)BIRTHDAY_COUNT;
+    g_birthdays.count = n;
+    for (uint8_t i = 0; i < n; i++) {
+      g_birthdays.items[i].month   = BIRTHDAYS[i][0];
+      g_birthdays.items[i].day     = BIRTHDAYS[i][1];
+      g_birthdays.items[i].name[0] = '\0';
+    }
+    saveBirthdays();
   }
 }
 
@@ -851,6 +897,7 @@ void setup() {
 
   // Load persisted settings (hostname, night mode) – falls back to defaults
   loadSettings();
+  loadBirthdays();
 
   // Count WiFi re-connects (skip the very first connection at boot)
   g_wifiReconnectHandler = WiFi.onStationModeConnected([](const WiFiEventStationModeConnected&) {
