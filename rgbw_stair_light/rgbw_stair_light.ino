@@ -714,16 +714,16 @@ void handleApiMemory(AsyncWebServerRequest *request) {
   request->send(response);
 }
 
-// Returns true if current date (local, NTP + CET/CEST offset) is listed in birthdays.h.
+// Returns true if current date (local, NTP + CET/CEST offset) matches any birthday in the runtime store.
 bool isBirthdayToday(long unixTimeUtc) {
-  if (BIRTHDAY_COUNT == 0) return false;
+  if (g_birthdays.count == 0) return false;
   time_t t = (time_t)(unixTimeUtc + TIMEZONE_OFFSET_SEC(unixTimeUtc));
   struct tm *tm = gmtime(&t);
   if (!tm) return false;
   int month = tm->tm_mon + 1;
   int day = tm->tm_mday;
-  for (int i = 0; i < BIRTHDAY_COUNT; i++) {
-    if ((int)BIRTHDAYS[i][0] == month && (int)BIRTHDAYS[i][1] == day)
+  for (uint8_t i = 0; i < g_birthdays.count; i++) {
+    if ((int)g_birthdays.items[i].month == month && (int)g_birthdays.items[i].day == day)
       return true;
   }
   return false;
