@@ -171,8 +171,6 @@ int gammaw[] = {
 // Night mode parameters – defined here so parking.h can use them
 #define NIGHT_HOUR_START      1   // 1:00
 #define NIGHT_HOUR_END        6   // 6:00 (exclusive)
-#define NIGHT_HOUR_START_STR  "1"
-#define NIGHT_HOUR_END_STR    "6"
 #define NIGHT_BRIGHTNESS_MAX  50  // max red value during night (≈ 20%)
 #define NIGHT_BRIGHTNESS_MIN  10  // min red value (never fully off)
 
