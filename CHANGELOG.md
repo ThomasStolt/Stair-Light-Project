@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.0 – 2026-06-07
+
+- **Web-editable birthdays** – View and edit the birthday list (month, day, optional name) in the web UI under "Birthdays"; add/remove rows and Save. Each birthday can have a short name shown in the UI.
+- **Persistent birthdays** – Birthdays are stored in a dedicated EEPROM region (separate from settings) and survive reboot; `birthdays.h` is now only the first-boot default. Up to 20 entries.
+- **New endpoints** – `GET`/`POST /api/birthdays`.
+
 ## 2.1.0 – 2026-06-06
 
 - **External control API** – `POST /api/ext` with `state=red|red_blink|green_fade|clear` lets another LAN process drive the strip directly (solid red, 500 ms red blink, ~30 s green dim-down). Motion detection is suppressed while active; normal behaviour (or night mode) resumes after `green_fade`/`clear`.
