@@ -166,7 +166,7 @@ int gammaw[] = {
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
 // Firmware version – shown in web UI footer
-#define FW_VERSION "2.1.0"
+#define FW_VERSION "2.2.0"
 
 // Night mode parameters – defined here so parking.h can use them
 #define NIGHT_HOUR_START      1   // 1:00
@@ -180,6 +180,9 @@ int gammaw[] = {
 // A small versioned struct. On first boot / blank flash / version change we
 // fall back to the compiled-in defaults and re-save. The struct fields are the
 // runtime config (read directly elsewhere) – no separate shadow globals.
+// EEPROM is shared: Settings at offset 0, birthdays at a fixed offset further in.
+#define EEPROM_SIZE            1024
+#define EEPROM_BIRTHDAYS_ADDR  128   // Settings live at offset 0; leave headroom to grow
 #define SETTINGS_MAGIC   0x53544C31u  // 'STL1'
 #define SETTINGS_VERSION 1
 struct Settings {
@@ -193,13 +196,13 @@ struct Settings {
 Settings g_settings;
 
 void saveSettings() {
-  EEPROM.begin(sizeof(Settings));   // idempotent; makes saveSettings() safe to call standalone
+  EEPROM.begin(EEPROM_SIZE);   // begin re-reads flash into RAM; keep begin→put→commit as a unit
   EEPROM.put(0, g_settings);
   EEPROM.commit();
 }
 
 void loadSettings() {
-  EEPROM.begin(sizeof(Settings));
+  EEPROM.begin(EEPROM_SIZE);
   EEPROM.get(0, g_settings);
   if (g_settings.magic != SETTINGS_MAGIC || g_settings.version != SETTINGS_VERSION) {
     // First boot / blank / version mismatch → compiled defaults
@@ -211,6 +214,49 @@ void loadSettings() {
     g_settings.nightStart   = NIGHT_HOUR_START;
     g_settings.nightEnd     = NIGHT_HOUR_END;
     saveSettings();
+  }
+}
+
+// ---- Persistent birthdays (separate EEPROM region) ------------------------
+// Independent magic/version so it self-heals without touching the Settings
+// region. Seeded from the compile-time birthdays.h list on first boot.
+#define BIRTHDAYS_MAX     20
+#define BIRTHDAY_NAME_LEN 20            // includes null terminator (<=19 visible chars)
+#define BIRTHDAYS_MAGIC   0x53544231u   // 'STB1'
+#define BIRTHDAYS_VERSION 1
+struct BirthdayStore {
+  uint32_t magic;
+  uint8_t  version;
+  uint8_t  count;                       // 0..BIRTHDAYS_MAX
+  struct {
+    uint8_t month;                      // 1..12
+    uint8_t day;                        // 1..31
+    char    name[BIRTHDAY_NAME_LEN];    // null-terminated, may be empty
+  } items[BIRTHDAYS_MAX];
+};
+BirthdayStore g_birthdays;
+
+void saveBirthdays() {
+  EEPROM.begin(EEPROM_SIZE);
+  EEPROM.put(EEPROM_BIRTHDAYS_ADDR, g_birthdays);
+  EEPROM.commit();
+}
+
+void loadBirthdays() {
+  EEPROM.begin(EEPROM_SIZE);
+  EEPROM.get(EEPROM_BIRTHDAYS_ADDR, g_birthdays);
+  if (g_birthdays.magic != BIRTHDAYS_MAGIC || g_birthdays.version != BIRTHDAYS_VERSION) {
+    // First boot / blank / schema change → seed from compiled birthdays.h defaults
+    g_birthdays.magic   = BIRTHDAYS_MAGIC;
+    g_birthdays.version = BIRTHDAYS_VERSION;
+    uint8_t n = (BIRTHDAY_COUNT > BIRTHDAYS_MAX) ? BIRTHDAYS_MAX : (uint8_t)BIRTHDAY_COUNT;
+    g_birthdays.count = n;
+    for (uint8_t i = 0; i < n; i++) {
+      g_birthdays.items[i].month   = BIRTHDAYS[i][0];
+      g_birthdays.items[i].day     = BIRTHDAYS[i][1];
+      g_birthdays.items[i].name[0] = '\0';
+    }
+    saveBirthdays();
   }
 }
 
@@ -341,6 +387,13 @@ void handleIndex(AsyncWebServerRequest *request) {
     "<button type=button class=\"btn preset\" id=setSave>Save settings</button>"
     "<span id=setStatus style=font-size:0.85rem;></span></div>"
     "</div></details>"
+    "<details id=detailBirthdays><summary>Birthdays</summary><div class=inner>"
+    "<div id=bdayRows></div>"
+    "<div class=row style=justify-content:flex-start;margin-top:0.5rem;>"
+    "<button type=button class=\"btn preset\" id=bdayAdd>+ Add</button>"
+    "<button type=button class=\"btn preset\" id=bdaySave>Save</button>"
+    "<span id=bdayStatus style=font-size:0.85rem;></span></div>"
+    "</div></details>"
     "<p style=margin-top:1rem;font-size:0.75rem;color:#666;>Firmware v" FW_VERSION "</p></main>"
     "<script>"
     "var sliders={r:document.getElementById('slR'),g:document.getElementById('slG'),b:document.getElementById('slB'),w:document.getElementById('slW')};"
@@ -415,7 +468,35 @@ void handleIndex(AsyncWebServerRequest *request) {
     "if(r.status===204){st.textContent='Saved';st.style.color='#9f9';loadSettings();}"
     "else{st.textContent='Invalid';st.style.color='#f88';}"
     "});};"
-    "loadFast();loadSlow();loadSettings();"
+    "var BDAY_MAX=20;"
+    "function bdayRow(m,d,name){"
+    "var div=document.createElement('div');div.className='slider-row';div.style.gap='6px';"
+    "div.innerHTML='<input type=number min=1 max=12 class=bm style=\"width:3.2em;background:#111;color:#eee;border:1px solid #444;border-radius:6px;padding:0.3rem;\"> '"
+    "+'<input type=number min=1 max=31 class=bd style=\"width:3.2em;background:#111;color:#eee;border:1px solid #444;border-radius:6px;padding:0.3rem;\"> '"
+    "+'<input type=text class=bn placeholder=name style=\"flex:1;min-width:0;background:#111;color:#eee;border:1px solid #444;border-radius:6px;padding:0.3rem;\"> '"
+    "+'<button type=button class=btn style=\"padding:0.2rem 0.6rem;background:#522;color:#f99;\">x</button>';"
+    "div.querySelector('.bm').value=m;div.querySelector('.bd').value=d;div.querySelector('.bn').value=name||'';"
+    "div.querySelector('button').onclick=function(){div.remove();};"
+    "return div;}"
+    "function loadBirthdays(){"
+    "fetch('/api/birthdays').then(function(r){return r.json();}).then(function(a){"
+    "var box=document.getElementById('bdayRows');box.innerHTML='';"
+    "for(var i=0;i<a.length;i++){box.appendChild(bdayRow(a[i].m,a[i].d,a[i].name));}"
+    "});}"
+    "document.getElementById('bdayAdd').onclick=function(){"
+    "var box=document.getElementById('bdayRows');if(box.children.length>=BDAY_MAX)return;box.appendChild(bdayRow('','',''));};"
+    "document.getElementById('bdaySave').onclick=function(){"
+    "var rows=document.getElementById('bdayRows').children;var body='count='+rows.length;"
+    "for(var i=0;i<rows.length;i++){"
+    "body+='&m'+i+'='+encodeURIComponent(rows[i].querySelector('.bm').value)"
+    "+'&d'+i+'='+encodeURIComponent(rows[i].querySelector('.bd').value)"
+    "+'&n'+i+'='+encodeURIComponent(rows[i].querySelector('.bn').value);}"
+    "var st=document.getElementById('bdayStatus');st.textContent='Saving...';st.style.color='#fc8';"
+    "post('/api/birthdays',body).then(function(r){"
+    "if(r.status===204){st.textContent='Saved';st.style.color='#9f9';loadBirthdays();}"
+    "else{st.textContent='Invalid';st.style.color='#f88';}"
+    "});};"
+    "loadFast();loadSlow();loadSettings();loadBirthdays();"
     "setInterval(loadFast,2000);"
     "setInterval(loadSlow,15000);"
     "</script></body></html>"
@@ -668,16 +749,16 @@ void handleApiMemory(AsyncWebServerRequest *request) {
   request->send(response);
 }
 
-// Returns true if current date (local, NTP + CET/CEST offset) is listed in birthdays.h.
+// Returns true if current date (local, NTP + CET/CEST offset) matches any birthday in the runtime store.
 bool isBirthdayToday(long unixTimeUtc) {
-  if (BIRTHDAY_COUNT == 0) return false;
+  if (g_birthdays.count == 0) return false;
   time_t t = (time_t)(unixTimeUtc + TIMEZONE_OFFSET_SEC(unixTimeUtc));
   struct tm *tm = gmtime(&t);
   if (!tm) return false;
   int month = tm->tm_mon + 1;
   int day = tm->tm_mday;
-  for (int i = 0; i < BIRTHDAY_COUNT; i++) {
-    if ((int)BIRTHDAYS[i][0] == month && (int)BIRTHDAYS[i][1] == day)
+  for (uint8_t i = 0; i < g_birthdays.count; i++) {
+    if ((int)g_birthdays.items[i].month == month && (int)g_birthdays.items[i].day == day)
       return true;
   }
   return false;
@@ -760,6 +841,79 @@ void handleApiSettingsPost(AsyncWebServerRequest *request) {
     changed = true;
   }
   if (changed) saveSettings();
+  request->send(204);
+}
+
+// GET /api/birthdays – JSON array of {m,d,name} for the Web UI
+void handleApiBirthdaysGet(AsyncWebServerRequest *request) {
+  String json = "[";
+  for (uint8_t i = 0; i < g_birthdays.count; i++) {
+    if (i > 0) json += ",";
+    String nm = g_birthdays.items[i].name;
+    nm.replace("\"", "'");
+    json += "{\"m\":"; json += g_birthdays.items[i].month;
+    json += ",\"d\":"; json += g_birthdays.items[i].day;
+    json += ",\"name\":\""; json += nm; json += "\"}";
+  }
+  json += "]";
+  AsyncWebServerResponse *response = request->beginResponse(200, F("application/json"), json);
+  response->addHeader(F("Cache-Control"), F("no-store"));
+  request->send(response);
+}
+
+// POST /api/birthdays – replace the whole list.
+// Body (form-encoded): count=N then for i in 0..N-1: m<i>, d<i>, n<i>
+void handleApiBirthdaysPost(AsyncWebServerRequest *request) {
+  if (!request->hasParam(F("count"), true)) {
+    request->send(400, F("text/plain"), F("count required")); return;
+  }
+  String countStr = request->getParam(F("count"), true)->value();
+  if (countStr.length() == 0) {
+    request->send(400, F("text/plain"), F("count must be a number")); return;
+  }
+  for (size_t k = 0; k < countStr.length(); k++) {
+    if (countStr[k] < '0' || countStr[k] > '9') {
+      request->send(400, F("text/plain"), F("count must be a number")); return;
+    }
+  }
+  int count = countStr.toInt();
+  if (count < 0 || count > BIRTHDAYS_MAX) {
+    request->send(400, F("text/plain"), F("count 0..20")); return;
+  }
+  // Build into a static temp; only commit to g_birthdays after all entries validate
+  // (no partial write). static avoids ~450 B on the async callback stack and is safe
+  // because ESP8266 AsyncWebServer callbacks all run in one task (no reentrancy).
+  static BirthdayStore tmp;
+  tmp.magic   = BIRTHDAYS_MAGIC;
+  tmp.version = BIRTHDAYS_VERSION;
+  tmp.count   = (uint8_t)count;
+  for (int i = 0; i < count; i++) {
+    String mi = String("m") + i, di = String("d") + i, ni = String("n") + i;
+    if (!request->hasParam(mi, true) || !request->hasParam(di, true)) {
+      request->send(400, F("text/plain"), F("missing m/d for an entry")); return;
+    }
+    int m = request->getParam(mi, true)->value().toInt();
+    int d = request->getParam(di, true)->value().toInt();
+    if (m < 1 || m > 12) { request->send(400, F("text/plain"), F("month 1..12")); return; }
+    if (d < 1 || d > 31) { request->send(400, F("text/plain"), F("day 1..31")); return; }
+    String nm = request->hasParam(ni, true) ? request->getParam(ni, true)->value() : String("");
+    nm.trim();
+    if (nm.length() > BIRTHDAY_NAME_LEN - 1) {
+      request->send(400, F("text/plain"), F("name too long (max 19)")); return;
+    }
+    for (size_t k = 0; k < nm.length(); k++) {
+      char c = nm[k];
+      bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                (c >= '0' && c <= '9') || c == ' ' || c == '-' || c == '_' || c == '.';
+      if (!ok) { request->send(400, F("text/plain"), F("name: letters/digits/space/-_. only")); return; }
+    }
+    tmp.items[i].month = (uint8_t)m;
+    tmp.items[i].day   = (uint8_t)d;
+    strncpy(tmp.items[i].name, nm.c_str(), BIRTHDAY_NAME_LEN - 1);
+    tmp.items[i].name[BIRTHDAY_NAME_LEN - 1] = '\0';
+  }
+  g_birthdays = tmp;
+  saveBirthdays();
   request->send(204);
 }
 
@@ -851,6 +1005,7 @@ void setup() {
 
   // Load persisted settings (hostname, night mode) – falls back to defaults
   loadSettings();
+  loadBirthdays();
 
   // Count WiFi re-connects (skip the very first connection at boot)
   g_wifiReconnectHandler = WiFi.onStationModeConnected([](const WiFiEventStationModeConnected&) {
@@ -951,6 +1106,8 @@ void setup() {
   server.on("/api/sysinfo", HTTP_GET, handleApiSysinfo);
   server.on("/api/settings", HTTP_GET,  handleApiSettingsGet);
   server.on("/api/settings", HTTP_POST, handleApiSettingsPost);
+  server.on("/api/birthdays", HTTP_GET,  handleApiBirthdaysGet);
+  server.on("/api/birthdays", HTTP_POST, handleApiBirthdaysPost);
   server.onNotFound([](AsyncWebServerRequest *request) { request->send(404, F("text/plain"), F("Not Found")); });
   server.begin();
 #if DEBUG

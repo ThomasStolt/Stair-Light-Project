@@ -182,6 +182,24 @@ The same “Night (red breathing)” animation can be tested anytime in the web 
 
 ---
 
+## Birthdays
+
+Birthdays (month, day, and an optional name) trigger the birthday animation on the day.
+They are editable in the web UI under **Birthdays** — add or remove rows and click Save —
+and are stored in flash (up to 20 entries), surviving reboots. `birthdays.h` is only the
+first-boot default; after that the saved list is authoritative.
+
+API:
+
+```bash
+curl http://<host>/api/birthdays
+# [{"m":11,"d":19,"name":"Anna"}, ...]
+```
+
+`POST /api/birthdays` replaces the whole list (form-encoded: `count=N` then `m<i>`,
+`d<i>`, `n<i>` for each entry). Months 1–12, days 1–31, names up to 19 characters
+(letters, digits, space, `-` `_` `.`).
+
 ## External control API
 
 Another process on the same network can drive the strip directly, bypassing motion
