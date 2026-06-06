@@ -39,6 +39,7 @@
 #include "credentials.h"
 #include "birthdays.h"
 #include <Ticker.h>
+#include <EEPROM.h>
 #include <time.h>
 
 #ifdef __AVR__
@@ -103,6 +104,16 @@ uint32_t g_animDurationOverrideMs = 0;
 volatile int g_pendingPlayAnim = 0;   // 0 = none, 1-6 = animation to play
 volatile bool g_pendingReboot = false;
 
+// External control (parking/garage signalling). Web handler sets g_pendingExtCmd;
+// loop() applies it and drives the strip non-blocking while g_extActive is true.
+enum ExtMode { EXT_NONE = 0, EXT_RED, EXT_RED_BLINK, EXT_GREEN_FADE };
+volatile int  g_pendingExtCmd = 0;   // 0=none,1=red,2=red_blink,3=green_fade,4=clear
+ExtMode       g_extMode    = EXT_NONE;
+bool          g_extActive  = false;
+unsigned long g_extStartMs = 0;      // green_fade start time
+unsigned long g_extBlinkMs = 0;      // red_blink last toggle time
+bool          g_extBlinkOn = false;
+
 // Last NTP time (UTC) from main loop; used by /api/time for Web UI date/time display
 volatile long g_lastNtpTime = 0;
 // First valid NTP time after boot (for "last reboot" display in Web UI)
@@ -155,17 +166,53 @@ int gammaw[] = {
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
 // Firmware version – shown in web UI footer
-#define FW_VERSION "2.0.0"
+#define FW_VERSION "2.1.0"
 
 // Night mode parameters – defined here so parking.h can use them
 #define NIGHT_HOUR_START      1   // 1:00
 #define NIGHT_HOUR_END        6   // 6:00 (exclusive)
-#define NIGHT_HOUR_START_STR  "1"
-#define NIGHT_HOUR_END_STR    "6"
 #define NIGHT_BRIGHTNESS_MAX  50  // max red value during night (≈ 20%)
 #define NIGHT_BRIGHTNESS_MIN  10  // min red value (never fully off)
 
 #include "parking.h"
+
+// ---- Persistent settings (EEPROM emulation) -------------------------------
+// A small versioned struct. On first boot / blank flash / version change we
+// fall back to the compiled-in defaults and re-save. The struct fields are the
+// runtime config (read directly elsewhere) – no separate shadow globals.
+#define SETTINGS_MAGIC   0x53544C31u  // 'STL1'
+#define SETTINGS_VERSION 1
+struct Settings {
+  uint32_t magic;
+  uint8_t  version;
+  char     hostname[32];   // null-terminated, <=31 chars
+  bool     nightEnabled;
+  uint8_t  nightStart;     // hour 0–23 (inclusive)
+  uint8_t  nightEnd;       // hour 0–23 (exclusive)
+};
+Settings g_settings;
+
+void saveSettings() {
+  EEPROM.begin(sizeof(Settings));   // idempotent; makes saveSettings() safe to call standalone
+  EEPROM.put(0, g_settings);
+  EEPROM.commit();
+}
+
+void loadSettings() {
+  EEPROM.begin(sizeof(Settings));
+  EEPROM.get(0, g_settings);
+  if (g_settings.magic != SETTINGS_MAGIC || g_settings.version != SETTINGS_VERSION) {
+    // First boot / blank / version mismatch → compiled defaults
+    g_settings.magic   = SETTINGS_MAGIC;
+    g_settings.version = SETTINGS_VERSION;
+    strncpy(g_settings.hostname, OTA_HOSTNAME, sizeof(g_settings.hostname) - 1);
+    g_settings.hostname[sizeof(g_settings.hostname) - 1] = '\0';
+    g_settings.nightEnabled = true;
+    g_settings.nightStart   = NIGHT_HOUR_START;
+    g_settings.nightEnd     = NIGHT_HOUR_END;
+    saveSettings();
+  }
+}
 
 WiFiUDP udp;
 EasyNTPClient ntpClient(udp, "pool.ntp.org", ((0*60*60)+(0*60))); // CET = GMT + 1:00
@@ -244,7 +291,7 @@ void handleIndex(AsyncWebServerRequest *request) {
     "<div class=row><button type=button class=\"btn auto-on\" id=autoOn>On</button>"
     "<button type=button class=\"btn auto-off\" id=autoOff>Off</button>"
     "<b id=autoStatus style=margin-left:0.3rem;>&ndash;</b></div>"
-    "<p id=nightBadge style=\"display:none;margin:0.4rem 0 0;padding:0.4rem 0.8rem;border-radius:8px;background:rgba(180,40,40,0.25);border:1px solid #a33;font-size:0.9rem;color:#f88;\">Night mode active (" NIGHT_HOUR_START_STR ":00 &ndash; " NIGHT_HOUR_END_STR ":00)</p>"
+    "<p id=nightBadge style=\"display:none;margin:0.4rem 0 0;padding:0.4rem 0.8rem;border-radius:8px;background:rgba(180,40,40,0.25);border:1px solid #a33;font-size:0.9rem;color:#f88;\">Night mode active <span id=nightWindow></span></p>"
     "</div>"
     "<div class=section>"
     "<b>RGBW Channels</b>"
@@ -279,6 +326,21 @@ void handleIndex(AsyncWebServerRequest *request) {
     "<table><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody id=cpuBody></tbody></table></div></details>"
     "<details id=detailWifi><summary>WiFi</summary><div class=inner>"
     "<table><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody id=wifiBody></tbody></table></div></details>"
+    "<details id=detailSettings><summary>Settings</summary><div class=inner>"
+    "<div style=margin-bottom:0.6rem;>"
+    "<label style=display:block;margin-bottom:0.2rem;font-size:0.9rem;>Hostname</label>"
+    "<input type=text id=setHostname style=\"width:100%;box-sizing:border-box;padding:0.4rem;background:#111;color:#eee;border:1px solid #444;border-radius:6px;\">"
+    "<div style=font-size:0.75rem;color:#888;margin-top:0.2rem;>Applies after reboot</div>"
+    "</div>"
+    "<div style=margin-bottom:0.6rem;><label style=font-size:0.9rem;><input type=checkbox id=setNightEnabled> Night mode enabled</label></div>"
+    "<div class=row style=justify-content:flex-start;>"
+    "<label style=font-size:0.9rem;>Start <input type=number id=setNightStart min=0 max=23 style=\"width:3.5em;background:#111;color:#eee;border:1px solid #444;border-radius:6px;padding:0.3rem;\">:00</label>"
+    "<label style=font-size:0.9rem;>End <input type=number id=setNightEnd min=0 max=23 style=\"width:3.5em;background:#111;color:#eee;border:1px solid #444;border-radius:6px;padding:0.3rem;\">:00</label>"
+    "</div>"
+    "<div class=row style=justify-content:flex-start;margin-top:0.5rem;>"
+    "<button type=button class=\"btn preset\" id=setSave>Save settings</button>"
+    "<span id=setStatus style=font-size:0.85rem;></span></div>"
+    "</div></details>"
     "<p style=margin-top:1rem;font-size:0.75rem;color:#666;>Firmware v" FW_VERSION "</p></main>"
     "<script>"
     "var sliders={r:document.getElementById('slR'),g:document.getElementById('slG'),b:document.getElementById('slB'),w:document.getElementById('slW')};"
@@ -332,10 +394,28 @@ void handleIndex(AsyncWebServerRequest *request) {
     "});"
     "document.getElementById('autoOn').onclick=function(){post('/api/auto','on=1').then(loadFast);};"
     "document.getElementById('autoOff').onclick=function(){post('/api/auto','on=0').then(loadFast);};"
-    "document.querySelectorAll('.preset').forEach(function(btn){btn.onclick=function(){post('/api/color','all='+btn.getAttribute('data-all')).then(loadFast);};});"
+    "document.querySelectorAll('.preset[data-all]').forEach(function(btn){btn.onclick=function(){post('/api/color','all='+btn.getAttribute('data-all')).then(loadFast);};});"
     "document.querySelectorAll('.anim-btn').forEach(function(btn){btn.onclick=function(){post('/api/play','anim='+btn.getAttribute('data-anim'));};});"
     "document.getElementById('rebootBtn').onclick=function(){this.disabled=true;this.textContent='Rebooting...';post('/api/reboot').then(function(){setTimeout(function(){location.reload();},4000);});};"
-    "loadFast();loadSlow();"
+    "function loadSettings(){"
+    "fetch('/api/settings').then(function(r){return r.json();}).then(function(s){"
+    "document.getElementById('setHostname').value=s.hostname||'';"
+    "document.getElementById('setNightEnabled').checked=!!s.night_enabled;"
+    "document.getElementById('setNightStart').value=s.night_start;"
+    "document.getElementById('setNightEnd').value=s.night_end;"
+    "document.getElementById('nightWindow').textContent='('+s.night_start+':00 - '+s.night_end+':00)';"
+    "});}"
+    "document.getElementById('setSave').onclick=function(){"
+    "var body='hostname='+encodeURIComponent(document.getElementById('setHostname').value)"
+    "+'&night_enabled='+(document.getElementById('setNightEnabled').checked?1:0)"
+    "+'&night_start='+document.getElementById('setNightStart').value"
+    "+'&night_end='+document.getElementById('setNightEnd').value;"
+    "var st=document.getElementById('setStatus');st.textContent='Saving...';st.style.color='#fc8';"
+    "post('/api/settings',body).then(function(r){"
+    "if(r.status===204){st.textContent='Saved';st.style.color='#9f9';loadSettings();}"
+    "else{st.textContent='Invalid';st.style.color='#f88';}"
+    "});};"
+    "loadFast();loadSlow();loadSettings();"
     "setInterval(loadFast,2000);"
     "setInterval(loadSlow,15000);"
     "</script></body></html>"
@@ -437,6 +517,24 @@ void handleApiPlay(AsyncWebServerRequest *request) {
   int anim = request->getParam(F("anim"), true)->value().toInt();
   if (anim < 1 || anim > 6) { request->send(400, F("text/plain"), F("anim 1..6")); return; }
   g_pendingPlayAnim = anim;
+  request->send(204);
+}
+
+// POST /api/ext – external process drives the strip directly.
+// state = red | red_blink | green_fade | clear  (suppresses motion while active)
+void handleApiExt(AsyncWebServerRequest *request) {
+  if (!request->hasParam(F("state"), true)) {
+    request->send(400, F("text/plain"), F("state=red|red_blink|green_fade|clear"));
+    return;
+  }
+  String s = request->getParam(F("state"), true)->value();
+  int cmd = 0;
+  if      (s == F("red"))        cmd = 1;
+  else if (s == F("red_blink"))  cmd = 2;
+  else if (s == F("green_fade")) cmd = 3;
+  else if (s == F("clear"))      cmd = 4;
+  else { request->send(400, F("text/plain"), F("state=red|red_blink|green_fade|clear")); return; }
+  g_pendingExtCmd = cmd;
   request->send(204);
 }
 
@@ -608,13 +706,71 @@ void handleApiSysinfo(AsyncWebServerRequest *request) {
   request->send(response);
 }
 
+// GET /api/settings – current configurable settings for the web UI
+void handleApiSettingsGet(AsyncWebServerRequest *request) {
+  String hn = g_settings.hostname;
+  hn.replace("\"", "'");   // keep JSON valid
+  String json = "{\"hostname\":\"";
+  json += hn;
+  json += "\",\"night_enabled\":";
+  json += g_settings.nightEnabled ? "1" : "0";
+  json += ",\"night_start\":";
+  json += g_settings.nightStart;
+  json += ",\"night_end\":";
+  json += g_settings.nightEnd;
+  json += "}";
+  AsyncWebServerResponse *response = request->beginResponse(200, F("application/json"), json);
+  response->addHeader(F("Cache-Control"), F("no-store"));
+  request->send(response);
+}
+
+// POST /api/settings – update any of hostname / night_enabled / night_start / night_end
+void handleApiSettingsPost(AsyncWebServerRequest *request) {
+  bool changed = false;
+  if (request->hasParam(F("hostname"), true)) {
+    String hn = request->getParam(F("hostname"), true)->value();
+    hn.trim();
+    if (hn.length() == 0 || hn.length() > 31) {
+      request->send(400, F("text/plain"), F("hostname 1..31 chars")); return;
+    }
+    for (size_t i = 0; i < hn.length(); i++) {
+      char c = hn[i];
+      bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                (c >= '0' && c <= '9') || c == '-';
+      if (!ok) { request->send(400, F("text/plain"), F("hostname: A-Z a-z 0-9 - only")); return; }
+    }
+    strncpy(g_settings.hostname, hn.c_str(), sizeof(g_settings.hostname) - 1);
+    g_settings.hostname[sizeof(g_settings.hostname) - 1] = '\0';
+    changed = true;
+  }
+  if (request->hasParam(F("night_enabled"), true)) {
+    g_settings.nightEnabled = (request->getParam(F("night_enabled"), true)->value().toInt() != 0);
+    changed = true;
+  }
+  if (request->hasParam(F("night_start"), true)) {
+    int v = request->getParam(F("night_start"), true)->value().toInt();
+    if (v < 0 || v > 23) { request->send(400, F("text/plain"), F("night_start 0..23")); return; }
+    g_settings.nightStart = (uint8_t)v;
+    changed = true;
+  }
+  if (request->hasParam(F("night_end"), true)) {
+    int v = request->getParam(F("night_end"), true)->value().toInt();
+    if (v < 0 || v > 23) { request->send(400, F("text/plain"), F("night_end 0..23")); return; }
+    g_settings.nightEnd = (uint8_t)v;
+    changed = true;
+  }
+  if (changed) saveSettings();
+  request->send(204);
+}
+
 bool isNightMode(long unixTimeUtc) {
+  if (!g_settings.nightEnabled) return false;
   if (unixTimeUtc <= 0) return false;
   time_t t = (time_t)(unixTimeUtc + TIMEZONE_OFFSET_SEC(unixTimeUtc));
   struct tm *tm = gmtime(&t);
   if (!tm) return false;
   int hour = tm->tm_hour;
-  return (hour >= NIGHT_HOUR_START && hour < NIGHT_HOUR_END);
+  return (hour >= g_settings.nightStart && hour < g_settings.nightEnd);
 }
 
 // Soft red "breathing" (min → max → min), cycle ~10 s; never fully off
@@ -630,6 +786,57 @@ void updateNightRed() {
   strip.show();
 }
 
+// Apply a newly received external command (sets mode + initial strip state).
+void applyExtCommand(int cmd) {
+  unsigned long now = millis();
+  switch (cmd) {
+    case 1: // red – solid, hold
+      g_extMode = EXT_RED;  g_extActive = true;
+      setAll(255, 0, 0, 0); strip.show();
+      break;
+    case 2: // red_blink – 500 ms toggle
+      g_extMode = EXT_RED_BLINK; g_extActive = true;
+      g_extBlinkMs = now; g_extBlinkOn = true;
+      setAll(255, 0, 0, 0); strip.show();
+      break;
+    case 3: // green_fade – full→off over ~30 s, then auto-clear
+      g_extMode = EXT_GREEN_FADE; g_extActive = true;
+      g_extStartMs = now;
+      setAll(0, manualPctToGamma(100), 0, 0); strip.show();
+      break;
+    case 4: // clear – release override, LEDs off
+    default:
+      g_extMode = EXT_NONE; g_extActive = false;
+      setAll(0, 0, 0, 0); strip.show();
+      break;
+  }
+}
+
+// Per-iteration servicing of an active external command (non-blocking).
+void serviceExtControl() {
+  unsigned long now = millis();
+  if (g_extMode == EXT_RED_BLINK) {
+    if (now - g_extBlinkMs >= 500uL) {
+      g_extBlinkMs = now;
+      g_extBlinkOn = !g_extBlinkOn;
+      setAll(g_extBlinkOn ? 255 : 0, 0, 0, 0);
+      strip.show();
+    }
+  } else if (g_extMode == EXT_GREEN_FADE) {
+    unsigned long elapsed = now - g_extStartMs;
+    if (elapsed >= 30000uL) {
+      setAll(0, 0, 0, 0); strip.show();
+      g_extMode = EXT_NONE;
+      g_extActive = false;            // normal behaviour resumes next iteration
+    } else {
+      int pct = (int)((30000uL - elapsed) * 100uL / 30000uL);
+      setAll(0, manualPctToGamma((uint8_t)pct), 0, 0);
+      strip.show();
+    }
+  }
+  // EXT_RED: nothing to do per-frame (already solid)
+}
+
 void setup() {
   // Setting up the serial line
   Serial.begin(115200);
@@ -641,6 +848,9 @@ void setup() {
   // Cache reset reason/info before WiFi stack overwrites them
   s_resetReason = ESP.getResetReason();
   s_resetInfo   = ESP.getResetInfo();
+
+  // Load persisted settings (hostname, night mode) – falls back to defaults
+  loadSettings();
 
   // Count WiFi re-connects (skip the very first connection at boot)
   g_wifiReconnectHandler = WiFi.onStationModeConnected([](const WiFiEventStationModeConnected&) {
@@ -667,6 +877,8 @@ void setup() {
   // ========================================================================================
   // WiFi: SSID and password from credentials.h (in .gitignore).
   // ========================================================================================
+  // Register our name on the network (DHCP) using the persisted hostname
+  WiFi.hostname(g_settings.hostname);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   Serial.print("Connecting");
   const unsigned long wifiTimeout = 10000;  // 10 s, then continue without WiFi (test bed)
@@ -698,7 +910,7 @@ void setup() {
   // OTA: you push new firmware from Cursor/PC (arduino-cli upload -p <ESP-IP>).
   // ESP does not fetch anything from a server by itself.
   if (WiFi.status() == WL_CONNECTED) {
-    ArduinoOTA.setHostname(OTA_HOSTNAME);
+    ArduinoOTA.setHostname(g_settings.hostname);
     ArduinoOTA.onStart([]() {
       Serial.printf("OTA start – free heap: %u bytes\n", ESP.getFreeHeap());
     });
@@ -731,11 +943,14 @@ void setup() {
   server.on("/api/color", HTTP_POST, handleApiColor);
   server.on("/api/alloff", HTTP_POST, handleApiAlloff);
   server.on("/api/play", HTTP_POST, handleApiPlay);
+  server.on("/api/ext", HTTP_POST, handleApiExt);
   server.on("/api/time", HTTP_GET, handleApiTime);
   server.on("/api/reboot", HTTP_POST, handleApiReboot);
   server.on("/api/log", HTTP_GET, handleApiLog);
   server.on("/api/memory", HTTP_GET, handleApiMemory);
   server.on("/api/sysinfo", HTTP_GET, handleApiSysinfo);
+  server.on("/api/settings", HTTP_GET,  handleApiSettingsGet);
+  server.on("/api/settings", HTTP_POST, handleApiSettingsPost);
   server.onNotFound([](AsyncWebServerRequest *request) { request->send(404, F("text/plain"), F("Not Found")); });
   server.begin();
 #if DEBUG
@@ -806,6 +1021,18 @@ void loop() {
       g_animDurationOverrideMs = 0;
       if (!automationOn) applyManualColor();
       else { setAll(0, 0, 0, 0); strip.show(); }
+    }
+
+    // External control overrides motion detection while active
+    if (g_pendingExtCmd > 0) {
+      applyExtCommand(g_pendingExtCmd);
+      g_pendingExtCmd = 0;
+    }
+    if (g_extActive) {
+      serviceExtControl();
+      yield();
+      delay(50);
+      continue;   // skip PIR / night / day handling this iteration
     }
 
     bool night = isNightMode(currenttime);

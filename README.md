@@ -59,6 +59,8 @@ Credentials go in **`rgbw_stair_light/credentials.h`** (gitignored).
 
 Without `credentials.h` the build fails.
 
+> The hostname can also be changed at runtime in the web UI (**Settings** section); it is stored in flash and applied on the next reboot. `OTA_HOSTNAME` in `credentials.h` is only the default used on first boot.
+
 ### 2. Birthdays (optional)
 
 On dates listed in **`rgbw_stair_light/birthdays.h`**, only the birthday animation runs.
@@ -180,6 +182,36 @@ The same “Night (red breathing)” animation can be tested anytime in the web 
 
 ---
 
+## External control API
+
+Another process on the same network can drive the strip directly, bypassing motion
+detection — e.g. a parking/garage helper signalling stop/go.
+
+`POST /api/ext` with form field `state`:
+
+| `state`      | Effect                                                        |
+|--------------|---------------------------------------------------------------|
+| `red`        | Solid red, held until the next command                        |
+| `red_blink`  | Red blinking every 500 ms                                     |
+| `green_fade` | Green dimming from full to off over ~30 s, then auto-clears   |
+| `clear`      | LEDs off immediately, override released                       |
+
+While a command is active, motion detection is suppressed. After `green_fade` finishes
+(or `clear`), normal behaviour resumes — daytime automation, or night mode if within
+the configured night hours. No authentication (trusted LAN only).
+
+```bash
+curl -X POST -d state=red        http://<host>/api/ext
+curl -X POST -d state=red_blink  http://<host>/api/ext
+curl -X POST -d state=green_fade http://<host>/api/ext
+curl -X POST -d state=clear      http://<host>/api/ext
+```
+
+Night mode (enable + start/end hours) and the hostname are configurable in the web UI
+**Settings** section and persist across reboots.
+
+---
+
 ## Sketch configuration
 
 In **`rgbw_stair_light/rgbw_stair_light.ino`** (and `parking.h`):
@@ -193,7 +225,7 @@ In **`rgbw_stair_light/rgbw_stair_light.ino`** (and `parking.h`):
 | `BRIGHTNESS` | LED brightness 0–255 | 255 |
 | `DEBUG` | 1 = PIR/trigger on serial monitor | 1 |
 | `TIMEZONE_OFFSET_SEC` | Seconds UTC→local (e.g. 3600 for CET) | 3600 |
-| `FW_VERSION` | Firmware version string shown in web UI | "1.0.0" |
+| `FW_VERSION` | Firmware version string shown in web UI | "2.1.0" |
 | `NIGHT_HOUR_START` / `NIGHT_HOUR_END` | Night mode from hour … to (excl.) | 1, 6 |
 | `NIGHT_BRIGHTNESS_MAX` / `NIGHT_BRIGHTNESS_MIN` | Red in night mode max/min (0–255) | 50, 10 |
 
