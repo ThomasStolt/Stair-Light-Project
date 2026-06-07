@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.3.0 – 2026-06-07
+
+- **External control: blinking yellow** – `POST /api/ext` now accepts `state=yellow_blink`, which blinks the strip yellow (red + green) every 500 ms until the next command. Like the other external states, it suppresses motion detection while active.
+
 ## 2.2.1 – 2026-06-07
 
 - **Night mode across midnight** – Fix: a night window where the start hour is later than the end hour (e.g. 23–6) now works. Previously only same-day windows (start < end) activated.
