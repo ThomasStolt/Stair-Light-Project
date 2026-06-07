@@ -169,7 +169,7 @@ int gammaw[] = {
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
 // Firmware version – shown in web UI footer
-#define FW_VERSION "2.5.2"
+#define FW_VERSION "2.6.0"
 
 // Night mode parameters – defined here so parking.h can use them
 #define NIGHT_HOUR_START      1   // 1:00
@@ -949,6 +949,23 @@ void updateNightRed() {
   strip.show();
 }
 
+// Smooth linear fade of all RGBW channels from `from` to `to` over `ms` (blocking,
+// ~500 ms). Keeps OTA serviced during the ramp. Used by the clean ("Staubsaugen") state.
+void cleanFadeAll(int from, int to, unsigned long ms) {
+  const unsigned long start = millis();
+  unsigned long el;
+  while ((el = millis() - start) < ms) {
+    int v = from + (int)(((long)(to - from) * (long)el) / (long)ms);
+    setAll(v, v, v, v);
+    strip.show();
+    ArduinoOTA.handle();
+    yield();
+    delay(10);
+  }
+  setAll(to, to, to, to);
+  strip.show();
+}
+
 // Apply a newly received external command (sets mode + initial strip state).
 void applyExtCommand(int cmd) {
   unsigned long now = millis();
@@ -973,12 +990,13 @@ void applyExtCommand(int cmd) {
       g_extBlinkMs = now; g_extBlinkOn = true;
       setAll(255, 255, 0, 0); strip.show();
       break;
-    case 6: // clean ("Staubsaugen") – all channels near-max (250, leaves margin), held (10 min timeout)
+    case 6: // clean ("Staubsaugen") – fade up 0→250 over 500 ms, held (10 min timeout)
       g_extMode = EXT_CLEAN; g_extActive = true;
-      setAll(250, 250, 250, 250); strip.show();
+      cleanFadeAll(0, 250, 500);
       break;
-    case 4: // clear – release override, LEDs off
+    case 4: // clear – release override (fade down if leaving clean), LEDs off
     default:
+      if (g_extMode == EXT_CLEAN) cleanFadeAll(250, 0, 500);  // smooth fade-out on "Staubsaugen aus"
       g_extMode = EXT_NONE; g_extActive = false;
       setAll(0, 0, 0, 0); strip.show();
       break;
@@ -995,6 +1013,7 @@ void serviceExtControl() {
       g_extMode == EXT_YELLOW_BLINK || g_extMode == EXT_CLEAN) {
     unsigned long holdTimeout = (g_extMode == EXT_CLEAN) ? EXT_CLEAN_TIMEOUT_MS : EXT_HOLD_TIMEOUT_MS;
     if (now - g_extLastCmdMs >= holdTimeout) {
+      if (g_extMode == EXT_CLEAN) cleanFadeAll(250, 0, 500);  // smooth fade-out on auto-timeout
       setAll(0, 0, 0, 0); strip.show();
       g_extMode = EXT_NONE;
       g_extActive = false;            // normal behaviour resumes next iteration

@@ -213,7 +213,7 @@ detection — e.g. a parking/garage helper signalling stop/go.
 | `red_blink`    | Red blinking every 500 ms                                   |
 | `green_fade`   | Green dimming from full to off over ~30 s, then auto-clears |
 | `yellow_blink` | Yellow (red + green) blinking every 500 ms                  |
-| `clean`        | All LEDs near-max (R+G+B+W = 250) for cleaning; auto-off after 10 min |
+| `clean`        | All LEDs fade up to near-max (R+G+B+W = 250) for cleaning; fades out on stop; auto-off after 10 min |
 | `clear`        | LEDs off immediately, override released                     |
 
 While a command is active, motion detection is suppressed. After `green_fade` finishes

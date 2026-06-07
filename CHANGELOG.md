@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.6.0 – 2026-06-07
+
+- **Cleaning light fades in/out** – `state=clean` now ramps up smoothly from 0 to 250 over ~500 ms instead of switching on instantly, and fades back down 250→0 over ~500 ms when it ends (on `clear`/"Staubsaugen aus" and on the 10-minute auto-timeout).
+
 ## 2.5.2 – 2026-06-07
 
 - **Fix: no spurious animation after an external override ends** – After `clear` (e.g. "Staubsaugen aus"), a green_fade finishing, or a hold timeout, the firmware now ignores the PIR sensors until they next read idle. Previously the lingering presence from the cleaning session (PIR still HIGH) immediately triggered an animation. A genuinely new motion still triggers normally.
