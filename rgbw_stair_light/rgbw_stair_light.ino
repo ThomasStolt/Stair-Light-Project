@@ -169,7 +169,7 @@ int gammaw[] = {
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
 // Firmware version – shown in web UI footer
-#define FW_VERSION "2.5.1"
+#define FW_VERSION "2.5.2"
 
 // Night mode parameters – defined here so parking.h can use them
 #define NIGHT_HOUR_START      1   // 1:00
@@ -1185,6 +1185,8 @@ void loop() {
   int lastPir1 = -1, lastPir2 = -1;  // for debug: detect change
   static int lastAnimation = 0;      // 0 = none yet, 1–4 = last chosen animation (no repeat)
   static bool wasNightMode = false;
+  bool extWasActive = false;         // tracks external-override active state across iterations
+  bool ignoreMotionUntilLow = false; // after an override ends, ignore lingering PIR HIGH
   while (true) {
     ArduinoOTA.handle();
     watchdogCount = 0;
@@ -1220,10 +1222,18 @@ void loop() {
       g_pendingExtCmd = 0;
     }
     if (g_extActive) {
+      extWasActive = true;
       serviceExtControl();
       yield();
       delay(50);
       continue;   // skip PIR / night / day handling this iteration
+    }
+    // Override just ended (clear / timeout / green_fade done): ignore any lingering
+    // PIR HIGH (e.g. the person who was vacuuming) until the sensors next read idle,
+    // so we don't fire an animation on stale presence.
+    if (extWasActive) {
+      extWasActive = false;
+      ignoreMotionUntilLow = true;
     }
 
     bool night = isNightMode(currenttime);
@@ -1262,6 +1272,13 @@ void loop() {
 
     if (pir1 == HIGH) { dir = "UP"; }
     if (pir2 == HIGH) { dir = "DOWN"; }
+
+    // After an external override ended, wait for both PIRs to read idle once before
+    // re-arming, so leftover presence from the override can't trigger an animation.
+    if (ignoreMotionUntilLow) {
+      if (pir1 == LOW && pir2 == LOW) ignoreMotionUntilLow = false;  // re-armed
+      dir = "";                                                       // ignore until then
+    }
 
     if (night && dir != "") {
 #if DEBUG
