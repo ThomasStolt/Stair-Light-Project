@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.5.1 – 2026-06-07
+
+- **Cleaning light brightness** – `state=clean` now drives all channels to **250** (instead of 255) to leave a little headroom on power/drivers.
+
 ## 2.5.0 – 2026-06-07
 
 - **Cleaning light ("Staubsaugen")** – `POST /api/ext state=clean` turns every LED to full brightness (all channels 255) for vacuuming/cleaning, held for up to **10 minutes** or until `state=clear` ("Staubsaugen aus"). Re-sending `clean` resets the 10-minute timer. Intended to be triggered by an Apple Shortcut via Siri ("Hey Siri, Staubsaugen!"). Note: all-channels-255 across 432 LEDs is a heavy sustained current draw — ensure the PSU/wiring can handle it.

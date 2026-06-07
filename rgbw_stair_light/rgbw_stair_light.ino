@@ -169,7 +169,7 @@ int gammaw[] = {
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
 // Firmware version – shown in web UI footer
-#define FW_VERSION "2.5.0"
+#define FW_VERSION "2.5.1"
 
 // Night mode parameters – defined here so parking.h can use them
 #define NIGHT_HOUR_START      1   // 1:00
@@ -973,9 +973,9 @@ void applyExtCommand(int cmd) {
       g_extBlinkMs = now; g_extBlinkOn = true;
       setAll(255, 255, 0, 0); strip.show();
       break;
-    case 6: // clean ("Staubsaugen") – all channels full brightness, held (10 min timeout)
+    case 6: // clean ("Staubsaugen") – all channels near-max (250, leaves margin), held (10 min timeout)
       g_extMode = EXT_CLEAN; g_extActive = true;
-      setAll(255, 255, 255, 255); strip.show();
+      setAll(250, 250, 250, 250); strip.show();
       break;
     case 4: // clear – release override, LEDs off
     default:
