@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.1 – 2026-06-07
+
+- **Night mode across midnight** – Fix: a night window where the start hour is later than the end hour (e.g. 23–6) now works. Previously only same-day windows (start < end) activated.
+- **Birthday table labels** – The Birthdays editor now shows Month / Day / Name column headers and `MM`/`DD` placeholders so it's clear which field is which.
+
 ## 2.2.0 – 2026-06-07
 
 - **Web-editable birthdays** – View and edit the birthday list (month, day, optional name) in the web UI under "Birthdays"; add/remove rows and Save. Each birthday can have a short name shown in the UI.

@@ -166,7 +166,7 @@ int gammaw[] = {
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
 // Firmware version – shown in web UI footer
-#define FW_VERSION "2.2.0"
+#define FW_VERSION "2.2.1"
 
 // Night mode parameters – defined here so parking.h can use them
 #define NIGHT_HOUR_START      1   // 1:00
@@ -388,6 +388,7 @@ void handleIndex(AsyncWebServerRequest *request) {
     "<span id=setStatus style=font-size:0.85rem;></span></div>"
     "</div></details>"
     "<details id=detailBirthdays><summary>Birthdays</summary><div class=inner>"
+    "<div class=slider-row style=\"gap:6px;font-size:0.75rem;color:#888;margin-bottom:0.2rem;\"><span style=\"width:64px;box-sizing:border-box;text-align:center;\">Month</span><span style=\"width:64px;box-sizing:border-box;text-align:center;\">Day</span><span style=flex:1;>Name</span></div>"
     "<div id=bdayRows></div>"
     "<div class=row style=justify-content:flex-start;margin-top:0.5rem;>"
     "<button type=button class=\"btn preset\" id=bdayAdd>+ Add</button>"
@@ -471,8 +472,8 @@ void handleIndex(AsyncWebServerRequest *request) {
     "var BDAY_MAX=20;"
     "function bdayRow(m,d,name){"
     "var div=document.createElement('div');div.className='slider-row';div.style.gap='6px';"
-    "div.innerHTML='<input type=number min=1 max=12 class=bm style=\"width:3.2em;background:#111;color:#eee;border:1px solid #444;border-radius:6px;padding:0.3rem;\"> '"
-    "+'<input type=number min=1 max=31 class=bd style=\"width:3.2em;background:#111;color:#eee;border:1px solid #444;border-radius:6px;padding:0.3rem;\"> '"
+    "div.innerHTML='<input type=number min=1 max=12 class=bm placeholder=MM style=\"width:3.2em;background:#111;color:#eee;border:1px solid #444;border-radius:6px;padding:0.3rem;\"> '"
+    "+'<input type=number min=1 max=31 class=bd placeholder=DD style=\"width:3.2em;background:#111;color:#eee;border:1px solid #444;border-radius:6px;padding:0.3rem;\"> '"
     "+'<input type=text class=bn placeholder=name style=\"flex:1;min-width:0;background:#111;color:#eee;border:1px solid #444;border-radius:6px;padding:0.3rem;\"> '"
     "+'<button type=button class=btn style=\"padding:0.2rem 0.6rem;background:#522;color:#f99;\">x</button>';"
     "div.querySelector('.bm').value=m;div.querySelector('.bd').value=d;div.querySelector('.bn').value=name||'';"
@@ -924,7 +925,10 @@ bool isNightMode(long unixTimeUtc) {
   struct tm *tm = gmtime(&t);
   if (!tm) return false;
   int hour = tm->tm_hour;
-  return (hour >= g_settings.nightStart && hour < g_settings.nightEnd);
+  uint8_t s = g_settings.nightStart, e = g_settings.nightEnd;
+  if (s == e) return false;                    // empty window
+  if (s < e) return (hour >= s && hour < e);   // same-day window (e.g. 1–6)
+  return (hour >= s || hour < e);              // window crosses midnight (e.g. 23–6)
 }
 
 // Soft red "breathing" (min → max → min), cycle ~10 s; never fully off
