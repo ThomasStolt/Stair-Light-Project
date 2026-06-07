@@ -219,6 +219,12 @@ While a command is active, motion detection is suppressed. After `green_fade` fi
 (or `clear`), normal behaviour resumes — daytime automation, or night mode if within
 the configured night hours. No authentication (trusted LAN only).
 
+The held states (`red`, `red_blink`, `yellow_blink`) stay active until the next command,
+but have a **5-minute safety timeout**: if no new `/api/ext` command arrives within 5
+minutes, the override releases automatically and normal operation resumes (so the stairs
+can't get stuck if the controller crashes or loses WiFi). Each command resets the timer.
+`green_fade` self-terminates after ~30 s.
+
 ```bash
 curl -X POST -d state=red        http://<host>/api/ext
 curl -X POST -d state=red_blink    http://<host>/api/ext

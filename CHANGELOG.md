@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.4.0 – 2026-06-07
+
+- **External control safety timeout** – Held states (`red`, `red_blink`, `yellow_blink`) now auto-release after **5 minutes** if no new `/api/ext` command arrives, returning to normal operation (motion automation / night mode). Each command resets the timer. `green_fade` already self-terminates (~30 s) and is unaffected. This prevents the stairs getting stuck if the controlling process crashes or loses WiFi.
+
 ## 2.3.0 – 2026-06-07
 
 - **External control: blinking yellow** – `POST /api/ext` now accepts `state=yellow_blink`, which blinks the strip yellow (red + green) every 500 ms until the next command. Like the other external states, it suppresses motion detection while active.

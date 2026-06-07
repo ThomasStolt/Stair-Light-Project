@@ -113,6 +113,8 @@ bool          g_extActive  = false;
 unsigned long g_extStartMs = 0;      // green_fade start time
 unsigned long g_extBlinkMs = 0;      // red_blink last toggle time
 bool          g_extBlinkOn = false;
+unsigned long g_extLastCmdMs = 0;    // time of last /api/ext command (for hold timeout)
+#define EXT_HOLD_TIMEOUT_MS 300000uL // held states (red/red_blink/yellow_blink) auto-clear after 5 min
 
 // Last NTP time (UTC) from main loop; used by /api/time for Web UI date/time display
 volatile long g_lastNtpTime = 0;
@@ -166,7 +168,7 @@ int gammaw[] = {
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
 // Firmware version – shown in web UI footer
-#define FW_VERSION "2.3.0"
+#define FW_VERSION "2.4.0"
 
 // Night mode parameters – defined here so parking.h can use them
 #define NIGHT_HOUR_START      1   // 1:00
@@ -948,6 +950,7 @@ void updateNightRed() {
 // Apply a newly received external command (sets mode + initial strip state).
 void applyExtCommand(int cmd) {
   unsigned long now = millis();
+  g_extLastCmdMs = now;   // reset the hold timeout on every received command
   switch (cmd) {
     case 1: // red – solid, hold
       g_extMode = EXT_RED;  g_extActive = true;
@@ -979,6 +982,16 @@ void applyExtCommand(int cmd) {
 // Per-iteration servicing of an active external command (non-blocking).
 void serviceExtControl() {
   unsigned long now = millis();
+  // Safety timeout: a held state auto-clears after 5 min with no new command, so the
+  // stairs can't get stuck if the controller dies. green_fade self-terminates (~30 s).
+  if (g_extMode == EXT_RED || g_extMode == EXT_RED_BLINK || g_extMode == EXT_YELLOW_BLINK) {
+    if (now - g_extLastCmdMs >= EXT_HOLD_TIMEOUT_MS) {
+      setAll(0, 0, 0, 0); strip.show();
+      g_extMode = EXT_NONE;
+      g_extActive = false;            // normal behaviour resumes next iteration
+      return;
+    }
+  }
   if (g_extMode == EXT_RED_BLINK || g_extMode == EXT_YELLOW_BLINK) {
     if (now - g_extBlinkMs >= 500uL) {
       g_extBlinkMs = now;
