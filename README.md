@@ -213,6 +213,7 @@ detection — e.g. a parking/garage helper signalling stop/go.
 | `red_blink`    | Red blinking every 500 ms                                   |
 | `green_fade`   | Green dimming from full to off over ~30 s, then auto-clears |
 | `yellow_blink` | Yellow (red + green) blinking every 500 ms                  |
+| `clean`        | All LEDs full brightness (R+G+B+W = 255) for cleaning; auto-off after 10 min |
 | `clear`        | LEDs off immediately, override released                     |
 
 While a command is active, motion detection is suppressed. After `green_fade` finishes
@@ -230,8 +231,25 @@ curl -X POST -d state=red        http://<host>/api/ext
 curl -X POST -d state=red_blink    http://<host>/api/ext
 curl -X POST -d state=green_fade   http://<host>/api/ext
 curl -X POST -d state=yellow_blink http://<host>/api/ext
+curl -X POST -d state=clean        http://<host>/api/ext
 curl -X POST -d state=clear        http://<host>/api/ext
 ```
+
+### Siri / Apple Shortcuts ("Staubsaugen")
+
+Siri can't call the ESP directly, but an Apple **Shortcut** can, and Siri runs Shortcuts by
+name. Create two shortcuts in the Shortcuts app (iPhone/iPad/Mac):
+
+1. **"Staubsaugen"** (cleaning light on):
+   - Add action **Get Contents of URL**
+   - URL: `http://stairlight.local/api/ext` (or the device IP, e.g. `http://192.168.2.74/api/ext`)
+   - Method: **POST**, Request Body: **Form**, add field `state` = `clean`
+2. **"Staubsaugen aus"** (off):
+   - Same action/URL, field `state` = `clear`
+
+Then say **"Hey Siri, Staubsaugen!"** to turn all LEDs to full brightness (auto-off after
+10 minutes) and **"Hey Siri, Staubsaugen aus!"** to turn it off. The device must be reachable
+on the same network (mDNS name `stairlight.local`, or use a DHCP-reserved IP).
 
 Night mode (enable + start/end hours) and the hostname are configurable in the web UI
 **Settings** section and persist across reboots.

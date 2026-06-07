@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.5.0 – 2026-06-07
+
+- **Cleaning light ("Staubsaugen")** – `POST /api/ext state=clean` turns every LED to full brightness (all channels 255) for vacuuming/cleaning, held for up to **10 minutes** or until `state=clear` ("Staubsaugen aus"). Re-sending `clean` resets the 10-minute timer. Intended to be triggered by an Apple Shortcut via Siri ("Hey Siri, Staubsaugen!"). Note: all-channels-255 across 432 LEDs is a heavy sustained current draw — ensure the PSU/wiring can handle it.
+
 ## 2.4.0 – 2026-06-07
 
 - **External control safety timeout** – Held states (`red`, `red_blink`, `yellow_blink`) now auto-release after **5 minutes** if no new `/api/ext` command arrives, returning to normal operation (motion automation / night mode). Each command resets the timer. `green_fade` already self-terminates (~30 s) and is unaffected. This prevents the stairs getting stuck if the controlling process crashes or loses WiFi.

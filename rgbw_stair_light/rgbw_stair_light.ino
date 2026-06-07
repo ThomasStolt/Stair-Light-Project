@@ -106,8 +106,8 @@ volatile bool g_pendingReboot = false;
 
 // External control (parking/garage signalling). Web handler sets g_pendingExtCmd;
 // loop() applies it and drives the strip non-blocking while g_extActive is true.
-enum ExtMode { EXT_NONE = 0, EXT_RED, EXT_RED_BLINK, EXT_GREEN_FADE, EXT_YELLOW_BLINK };
-volatile int  g_pendingExtCmd = 0;   // 0=none,1=red,2=red_blink,3=green_fade,4=clear,5=yellow_blink
+enum ExtMode { EXT_NONE = 0, EXT_RED, EXT_RED_BLINK, EXT_GREEN_FADE, EXT_YELLOW_BLINK, EXT_CLEAN };
+volatile int  g_pendingExtCmd = 0;   // 0=none,1=red,2=red_blink,3=green_fade,4=clear,5=yellow_blink,6=clean
 ExtMode       g_extMode    = EXT_NONE;
 bool          g_extActive  = false;
 unsigned long g_extStartMs = 0;      // green_fade start time
@@ -115,6 +115,7 @@ unsigned long g_extBlinkMs = 0;      // red_blink last toggle time
 bool          g_extBlinkOn = false;
 unsigned long g_extLastCmdMs = 0;    // time of last /api/ext command (for hold timeout)
 #define EXT_HOLD_TIMEOUT_MS 300000uL // held states (red/red_blink/yellow_blink) auto-clear after 5 min
+#define EXT_CLEAN_TIMEOUT_MS 600000uL // clean (full brightness) auto-clears after 10 min
 
 // Last NTP time (UTC) from main loop; used by /api/time for Web UI date/time display
 volatile long g_lastNtpTime = 0;
@@ -168,7 +169,7 @@ int gammaw[] = {
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
 // Firmware version – shown in web UI footer
-#define FW_VERSION "2.4.0"
+#define FW_VERSION "2.5.0"
 
 // Night mode parameters – defined here so parking.h can use them
 #define NIGHT_HOUR_START      1   // 1:00
@@ -605,10 +606,10 @@ void handleApiPlay(AsyncWebServerRequest *request) {
 }
 
 // POST /api/ext – external process drives the strip directly.
-// state = red | red_blink | green_fade | yellow_blink | clear  (suppresses motion while active)
+// state = red | red_blink | green_fade | yellow_blink | clean | clear  (suppresses motion while active)
 void handleApiExt(AsyncWebServerRequest *request) {
   if (!request->hasParam(F("state"), true)) {
-    request->send(400, F("text/plain"), F("state=red|red_blink|green_fade|yellow_blink|clear"));
+    request->send(400, F("text/plain"), F("state=red|red_blink|green_fade|yellow_blink|clean|clear"));
     return;
   }
   String s = request->getParam(F("state"), true)->value();
@@ -618,7 +619,8 @@ void handleApiExt(AsyncWebServerRequest *request) {
   else if (s == F("green_fade"))   cmd = 3;
   else if (s == F("clear"))        cmd = 4;
   else if (s == F("yellow_blink")) cmd = 5;
-  else { request->send(400, F("text/plain"), F("state=red|red_blink|green_fade|yellow_blink|clear")); return; }
+  else if (s == F("clean"))        cmd = 6;
+  else { request->send(400, F("text/plain"), F("state=red|red_blink|green_fade|yellow_blink|clean|clear")); return; }
   g_pendingExtCmd = cmd;
   request->send(204);
 }
@@ -971,6 +973,10 @@ void applyExtCommand(int cmd) {
       g_extBlinkMs = now; g_extBlinkOn = true;
       setAll(255, 255, 0, 0); strip.show();
       break;
+    case 6: // clean ("Staubsaugen") – all channels full brightness, held (10 min timeout)
+      g_extMode = EXT_CLEAN; g_extActive = true;
+      setAll(255, 255, 255, 255); strip.show();
+      break;
     case 4: // clear – release override, LEDs off
     default:
       g_extMode = EXT_NONE; g_extActive = false;
@@ -982,10 +988,13 @@ void applyExtCommand(int cmd) {
 // Per-iteration servicing of an active external command (non-blocking).
 void serviceExtControl() {
   unsigned long now = millis();
-  // Safety timeout: a held state auto-clears after 5 min with no new command, so the
-  // stairs can't get stuck if the controller dies. green_fade self-terminates (~30 s).
-  if (g_extMode == EXT_RED || g_extMode == EXT_RED_BLINK || g_extMode == EXT_YELLOW_BLINK) {
-    if (now - g_extLastCmdMs >= EXT_HOLD_TIMEOUT_MS) {
+  // Safety timeout: held states auto-clear with no new command, so the stairs can't get
+  // stuck if the controller dies. clean holds 10 min; red/red_blink/yellow_blink 5 min.
+  // green_fade self-terminates (~30 s) and is excluded.
+  if (g_extMode == EXT_RED || g_extMode == EXT_RED_BLINK ||
+      g_extMode == EXT_YELLOW_BLINK || g_extMode == EXT_CLEAN) {
+    unsigned long holdTimeout = (g_extMode == EXT_CLEAN) ? EXT_CLEAN_TIMEOUT_MS : EXT_HOLD_TIMEOUT_MS;
+    if (now - g_extLastCmdMs >= holdTimeout) {
       setAll(0, 0, 0, 0); strip.show();
       g_extMode = EXT_NONE;
       g_extActive = false;            // normal behaviour resumes next iteration
