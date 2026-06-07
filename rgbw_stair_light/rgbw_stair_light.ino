@@ -106,8 +106,8 @@ volatile bool g_pendingReboot = false;
 
 // External control (parking/garage signalling). Web handler sets g_pendingExtCmd;
 // loop() applies it and drives the strip non-blocking while g_extActive is true.
-enum ExtMode { EXT_NONE = 0, EXT_RED, EXT_RED_BLINK, EXT_GREEN_FADE };
-volatile int  g_pendingExtCmd = 0;   // 0=none,1=red,2=red_blink,3=green_fade,4=clear
+enum ExtMode { EXT_NONE = 0, EXT_RED, EXT_RED_BLINK, EXT_GREEN_FADE, EXT_YELLOW_BLINK };
+volatile int  g_pendingExtCmd = 0;   // 0=none,1=red,2=red_blink,3=green_fade,4=clear,5=yellow_blink
 ExtMode       g_extMode    = EXT_NONE;
 bool          g_extActive  = false;
 unsigned long g_extStartMs = 0;      // green_fade start time
@@ -166,7 +166,7 @@ int gammaw[] = {
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
 // Firmware version – shown in web UI footer
-#define FW_VERSION "2.2.1"
+#define FW_VERSION "2.3.0"
 
 // Night mode parameters – defined here so parking.h can use them
 #define NIGHT_HOUR_START      1   // 1:00
@@ -603,19 +603,20 @@ void handleApiPlay(AsyncWebServerRequest *request) {
 }
 
 // POST /api/ext – external process drives the strip directly.
-// state = red | red_blink | green_fade | clear  (suppresses motion while active)
+// state = red | red_blink | green_fade | yellow_blink | clear  (suppresses motion while active)
 void handleApiExt(AsyncWebServerRequest *request) {
   if (!request->hasParam(F("state"), true)) {
-    request->send(400, F("text/plain"), F("state=red|red_blink|green_fade|clear"));
+    request->send(400, F("text/plain"), F("state=red|red_blink|green_fade|yellow_blink|clear"));
     return;
   }
   String s = request->getParam(F("state"), true)->value();
   int cmd = 0;
-  if      (s == F("red"))        cmd = 1;
-  else if (s == F("red_blink"))  cmd = 2;
-  else if (s == F("green_fade")) cmd = 3;
-  else if (s == F("clear"))      cmd = 4;
-  else { request->send(400, F("text/plain"), F("state=red|red_blink|green_fade|clear")); return; }
+  if      (s == F("red"))          cmd = 1;
+  else if (s == F("red_blink"))    cmd = 2;
+  else if (s == F("green_fade"))   cmd = 3;
+  else if (s == F("clear"))        cmd = 4;
+  else if (s == F("yellow_blink")) cmd = 5;
+  else { request->send(400, F("text/plain"), F("state=red|red_blink|green_fade|yellow_blink|clear")); return; }
   g_pendingExtCmd = cmd;
   request->send(204);
 }
@@ -962,6 +963,11 @@ void applyExtCommand(int cmd) {
       g_extStartMs = now;
       setAll(0, manualPctToGamma(100), 0, 0); strip.show();
       break;
+    case 5: // yellow_blink – 500 ms toggle (yellow = red + green)
+      g_extMode = EXT_YELLOW_BLINK; g_extActive = true;
+      g_extBlinkMs = now; g_extBlinkOn = true;
+      setAll(255, 255, 0, 0); strip.show();
+      break;
     case 4: // clear – release override, LEDs off
     default:
       g_extMode = EXT_NONE; g_extActive = false;
@@ -973,11 +979,13 @@ void applyExtCommand(int cmd) {
 // Per-iteration servicing of an active external command (non-blocking).
 void serviceExtControl() {
   unsigned long now = millis();
-  if (g_extMode == EXT_RED_BLINK) {
+  if (g_extMode == EXT_RED_BLINK || g_extMode == EXT_YELLOW_BLINK) {
     if (now - g_extBlinkMs >= 500uL) {
       g_extBlinkMs = now;
       g_extBlinkOn = !g_extBlinkOn;
-      setAll(g_extBlinkOn ? 255 : 0, 0, 0, 0);
+      uint8_t r = g_extBlinkOn ? 255 : 0;                                  // both modes use red
+      uint8_t g = (g_extBlinkOn && g_extMode == EXT_YELLOW_BLINK) ? 255 : 0; // yellow adds green
+      setAll(r, g, 0, 0);
       strip.show();
     }
   } else if (g_extMode == EXT_GREEN_FADE) {
