@@ -251,6 +251,24 @@ Then say **"Hey Siri, Staubsaugen!"** to turn all LEDs to full brightness (auto-
 10 minutes) and **"Hey Siri, Staubsaugen aus!"** to turn it off. The device must be reachable
 on the same network (mDNS name `stairlight.local`, or use a DHCP-reserved IP).
 
+#### Siri / Kurzbefehle einrichten (Deutsch)
+
+Siri kann den ESP nicht direkt ansprechen, aber Siri führt **Kurzbefehle** (Shortcuts)
+per Namen aus. Lege dafür zwei Kurzbefehle in der **Kurzbefehle**-App (iPhone/iPad/Mac) an:
+
+1. **Kurzbefehl „Staubsaugen"** (Licht an):
+   - Aktion **„Inhalte von URL abrufen"** hinzufügen
+   - URL: `http://stairlight.local/api/ext` (oder die Geräte-IP, z. B. `http://192.168.2.74/api/ext`)
+   - Auf **▸ Mehr anzeigen** tippen: **Methode** = `POST`, **Anfragetext** = `Formular`,
+     Feld **`state`** = `clean`
+2. **Kurzbefehl „Staubsaugen aus"** (Licht aus): gleich wie oben, aber Feld **`state`** = `clear`
+
+Dann **„Hey Siri, Staubsaugen!"** schaltet alle LEDs auf volle Helligkeit (sanft hochdimmen,
+automatische Abschaltung nach 10 Minuten) und **„Hey Siri, Staubsaugen aus!"** dimmt wieder
+herunter. Hinweise: Das iPhone muss im selben WLAN sein; beim ersten Mal fragt iOS nach der
+Erlaubnis für das lokale Netzwerk → **Erlauben**. Falls `stairlight.local` nicht auflöst, die
+IP verwenden (am besten im Router eine feste IP / DHCP-Reservierung vergeben).
+
 Night mode (enable + start/end hours) and the hostname are configurable in the web UI
 **Settings** section and persist across reboots.
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.6.1 – 2026-06-08
+
+- **Docs** – Added a German Siri/Kurzbefehle setup guide to the README. Documentation only; no firmware behaviour change vs 2.6.0.
+
 ## 2.6.0 – 2026-06-07
 
 - **Cleaning light fades in/out** – `state=clean` now ramps up smoothly from 0 to 250 over ~500 ms instead of switching on instantly, and fades back down 250→0 over ~500 ms when it ends (on `clear`/"Staubsaugen aus" and on the 10-minute auto-timeout).
