@@ -242,7 +242,7 @@ name. Create two shortcuts in the Shortcuts app (iPhone/iPad/Mac):
 
 1. **"Staubsaugen"** (cleaning light on):
    - Add action **Get Contents of URL**
-   - URL: `http://stairlight.local/api/ext` (or the device IP, e.g. `http://192.168.2.74/api/ext`)
+   - URL: `http://stairlight.local/api/ext` (or the device IP, e.g. `http://<device-ip>/api/ext`)
    - Method: **POST**, Request Body: **Form**, add field `state` = `clean`
 2. **"Staubsaugen aus"** (off):
    - Same action/URL, field `state` = `clear`
@@ -258,7 +258,7 @@ per Namen aus. Lege dafür zwei Kurzbefehle in der **Kurzbefehle**-App (iPhone/i
 
 1. **Kurzbefehl „Staubsaugen"** (Licht an):
    - Aktion **„Inhalte von URL abrufen"** hinzufügen
-   - URL: `http://stairlight.local/api/ext` (oder die Geräte-IP, z. B. `http://192.168.2.74/api/ext`)
+   - URL: `http://stairlight.local/api/ext` (oder die Geräte-IP, z. B. `http://<device-ip>/api/ext`)
    - Auf **▸ Mehr anzeigen** tippen: **Methode** = `POST`, **Anfragetext** = `Formular`,
      Feld **`state`** = `clean`
 2. **Kurzbefehl „Staubsaugen aus"** (Licht aus): gleich wie oben, aber Feld **`state`** = `clear`

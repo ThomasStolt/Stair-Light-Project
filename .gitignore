@@ -11,3 +11,8 @@ build/
 *.ino.bin
 *.ino.elf
 *.ino.map
+
+# Lokale KI-Assistenten-Notizen (können maschinenspezifische Infos enthalten – nicht committen)
+CLAUDE.md
+CLAUDE.local.md
+.claude/
