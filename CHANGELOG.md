@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.7.0 – 2026-06-08
+
+- **External control now preempts a running animation** – A `POST /api/ext` command (red/red_blink/yellow_blink/green_fade/clean/clear) now interrupts an in-progress motion animation instead of waiting for it (and its 10 s post-delay) to finish. The animation hold-phases and the post-animation delay abort as soon as a command is pending, so the strip switches to the requested state within ~1–2 s instead of up to ~30 s.
+
 ## 2.6.1 – 2026-06-08
 
 - **Docs** – Added a German Siri/Kurzbefehle setup guide to the README. Documentation only; no firmware behaviour change vs 2.6.0.

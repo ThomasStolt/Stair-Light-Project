@@ -218,7 +218,9 @@ detection — e.g. a parking/garage helper signalling stop/go.
 
 While a command is active, motion detection is suppressed. After `green_fade` finishes
 (or `clear`), normal behaviour resumes — daytime automation, or night mode if within
-the configured night hours. No authentication (trusted LAN only).
+the configured night hours. No authentication (trusted LAN only). An `/api/ext` command
+also **interrupts a running motion animation** (it aborts within ~1–2 s rather than
+waiting for the animation and its post-delay to finish).
 
 The held states (`red`, `red_blink`, `yellow_blink`) stay active until the next command,
 but have a **5-minute safety timeout**: if no new `/api/ext` command arrives within 5

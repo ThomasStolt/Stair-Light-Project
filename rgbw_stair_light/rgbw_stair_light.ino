@@ -169,7 +169,7 @@ int gammaw[] = {
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
 // Firmware version – shown in web UI footer
-#define FW_VERSION "2.6.1"
+#define FW_VERSION "2.7.0"
 
 // Night mode parameters – defined here so parking.h can use them
 #define NIGHT_HOUR_START      1   // 1:00
@@ -1305,7 +1305,7 @@ void loop() {
 #endif
       addMotionLog(dir.c_str(), 6);
       nightAnimation(dir);
-      for (unsigned long t = millis(); millis() - t < (unsigned long)POST_ANIM_DELAY_MS; ) {
+      for (unsigned long t = millis(); millis() - t < (unsigned long)POST_ANIM_DELAY_MS && g_pendingExtCmd == 0; ) {
         ArduinoOTA.handle();
         delay(100);
       }
@@ -1317,7 +1317,7 @@ void loop() {
         addMotionLog(dir.c_str(), 5);  // 5 = Birthday
         birthday(dir);
         // 10 s delay after birthday animation (same as others)
-        for (unsigned long t = millis(); millis() - t < (unsigned long)POST_ANIM_DELAY_MS; ) {
+        for (unsigned long t = millis(); millis() - t < (unsigned long)POST_ANIM_DELAY_MS && g_pendingExtCmd == 0; ) {
           ArduinoOTA.handle();
           delay(100);
         }
@@ -1345,7 +1345,7 @@ void loop() {
             break;
         }
         // 10 s delay after animation (OTA and web stay available)
-        for (unsigned long t = millis(); millis() - t < (unsigned long)POST_ANIM_DELAY_MS; ) {
+        for (unsigned long t = millis(); millis() - t < (unsigned long)POST_ANIM_DELAY_MS && g_pendingExtCmd == 0; ) {
           ArduinoOTA.handle();
           delay(100);
         }

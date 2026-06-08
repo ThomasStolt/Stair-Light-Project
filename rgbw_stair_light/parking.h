@@ -175,7 +175,7 @@ void FadeToFullBrightness(String dir){
     for ( i = 1; i <= STEPS; i++ ) {
       fadeInSingleStep(i, 100, 255, 255, 255, 255);
     }
-    while ( millis() - s_timer < limit ) {
+    while ( millis() - s_timer < limit && g_pendingExtCmd == 0 ) {
       delay(100);
       yield();
     }
@@ -188,7 +188,7 @@ void FadeToFullBrightness(String dir){
     for ( i = STEPS; i >= 1; i-- ) {
       fadeInSingleStep(i, 100, 255, 255, 255, 255);
     }
-    while ( millis() - s_timer < limit ) {
+    while ( millis() - s_timer < limit && g_pendingExtCmd == 0 ) {
       delay(100);
       yield();
     }
@@ -218,7 +218,7 @@ void starSparkle(String dir){
   if (dir == "UP") {
     Serial.println("Moving up the stairs");
     for ( i = 1; i <= STEPS; i++ ) { fadeInSingleStep(i, 75, 0, 0, blue, 0); }
-    while ( millis() - s_timer < limit ) {
+    while ( millis() - s_timer < limit && g_pendingExtCmd == 0 ) {
       for ( i = 1; i < random(minStars,maxStars); i++) {
         strip.setPixelColor(random(0,NUM_LEDS), 255, 255, 255, 255);
       }
@@ -231,7 +231,7 @@ void starSparkle(String dir){
   } else if ( dir == "DOWN" ) {
     Serial.println("Moving down the stairs");
     for ( i = STEPS; i >= 1; i-- ) { fadeInSingleStep(i, 75, 0, 0, blue, 0); }
-    while ( millis() - s_timer < limit ) {
+    while ( millis() - s_timer < limit && g_pendingExtCmd == 0 ) {
       for ( i = 1; i < random(minStars,maxStars); i++) {
         strip.setPixelColor(random(0, NUM_LEDS), 255, 255, 255, 255);
       }
@@ -269,7 +269,7 @@ void simpleFadeToRandom(String dir){
     for ( i = 1; i <= STEPS; i++ ) {
       fadeInSingleStep(i, 100, red, green, blue, white);
     }
-    while ( millis() - s_timer < limit ) {
+    while ( millis() - s_timer < limit && g_pendingExtCmd == 0 ) {
       delay(100);
       yield();
     }
@@ -282,7 +282,7 @@ void simpleFadeToRandom(String dir){
     for ( i = STEPS; i >= 1; i-- ) {
       fadeInSingleStep(i, 100, red, green, blue, white);
     }
-    while ( millis() - s_timer < limit ) {
+    while ( millis() - s_timer < limit && g_pendingExtCmd == 0 ) {
       delay(100);
       yield();
     }
@@ -355,7 +355,7 @@ void rainbowSteps(String dir){
     s_timer = millis(); timed_out = false;
     for (k = 0; k < 2; k++) {
       for (int i = 0; i < 256; i += 2) {
-        if (millis() - s_timer > limit) { timed_out = true; break; }
+        if (millis() - s_timer > limit || g_pendingExtCmd != 0) { timed_out = true; break; }
         for (j = 1; j <= STEPS; j++) setStep(j, Wheel(byte(i + (j-1)*255/STEPS)));
         strip.show();
         yield();
@@ -369,7 +369,7 @@ void rainbowSteps(String dir){
     s_timer = millis(); timed_out = false;
     for (k = 0; k < 2; k++) {
       for (int i = 256; i > 0; i--) {
-        if (millis() - s_timer > limit) { timed_out = true; break; }
+        if (millis() - s_timer > limit || g_pendingExtCmd != 0) { timed_out = true; break; }
         for (j = 1; j <= STEPS; j++) setStep(j, Wheel(byte(i + (j-1)*255/STEPS)));
         strip.show();
         yield();
@@ -412,7 +412,7 @@ void birthday(String dir) {
   unsigned long c_timer = millis();
   uint32_t limit = (g_animDurationOverrideMs != 0) ? g_animDurationOverrideMs : (uint32_t)ANIM_DURATION;
   int s;
-  while ( (unsigned long)(c_timer - s_timer) < limit ) {
+  while ( (unsigned long)(c_timer - s_timer) < limit && g_pendingExtCmd == 0 ) {
     for (s=1;s<=STEPS;s++) {
       setStepRndm(s, 1);
       c_timer = millis();
@@ -461,7 +461,7 @@ void nightAnimation(String dir) {
   }
 
   // Hold
-  while (millis() - s_timer < limit) {
+  while (millis() - s_timer < limit && g_pendingExtCmd == 0) {
     delay(100);
     yield();
   }
