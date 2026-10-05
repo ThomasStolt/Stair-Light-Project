@@ -58,6 +58,20 @@
 #define NUM_LEDS (STEPS * WIDTH)  // how many LEDs do we have overall?
 #define ANIM_DURATION 20000       // Duration of each animation (ms), then fade-out
 #define POST_ANIM_DELAY_MS 10000  // Delay after animation before next motion trigger (ms)
+#define RAINBOW_CYCLE_MS 5000     // Rainbow: time for one full trip through all colours (ms)
+#define RAINBOW_FADE_MS 1000      // Rainbow: fade-in time of one step (ms)
+#define RAINBOW_STAGGER_MS 200    // Rainbow: next step starts fading in this much later (ms; 200 = when the previous is at 20%)
+#define RAINBOW_DITHER 1          // Rainbow: 1 = in-between brightness by alternating levels over frames, 0 = off
+#define STAR_RATE 20              // Star sparkle: new stars per second
+#define STAR_FADE_MS 1500         // Star sparkle: longest star fade-out (ms); each star takes 50-100% of it
+#define STAR_MIN_PEAK 25          // Star sparkle: start brightness of the faintest star (%; brightest = 100)
+#define WAVE_FADE_MS 1500         // Star sparkle + birthday: fade-in/out time of one step (ms)
+#define WAVE_STAGGER_MS 150       // Star sparkle + birthday: next step starts this much later (150 = at 10%, like night red)
+#define BDAY_ON_PCT 75            // Birthday: share of LEDs glowing at any moment (%; 75 = a quarter dark)
+#define BDAY_LIFE_MS 4000         // Birthday: longest glow of one LED (ms); each takes 50-100% of it
+#define MATRIX_DROP_SPEED 8       // Matrix: average fall speed (steps per second; each drop 0.5-1.25x)
+#define MATRIX_TRAIL 9            // Matrix: longest trail behind a drop (steps; shortest is half)
+#define MATRIX_BASE 6             // Matrix: faint green glow on every step (0-255 PWM; 0 = pure black)
 // Auto-detect CET/CEST: UTC+1 in winter, UTC+2 in summer (last Sun of March – last Sun of October)
 static long timezoneOffsetSec(long utc) {
   time_t t = (time_t)utc;
@@ -94,14 +108,20 @@ ESP8266WiFiMulti WiFiMulti;
 AsyncWebServer server(80);
 
 // Web control: stair automation and manual colour (0–100% per channel)
-bool automationOn = true;   // Start: automation on (can be turned off via web)
+bool automationOn = true;   // restored from g_settings.automationOff at boot, toggled via web
 uint8_t manual_r = 0, manual_g = 0, manual_b = 0, manual_w = 0;  // 0–100 %
 
 // If > 0: animations (e.g. web "Go") run only for this duration (ms), else ANIM_DURATION
 uint32_t g_animDurationOverrideMs = 0;
 
 // Flags set by async web handlers, consumed by loop()
-volatile int g_pendingPlayAnim = 0;   // 0 = none, 1-6 = animation to play
+volatile int g_pendingPlayAnim = 0;   // 0 = none, 2-7 = animation to play
+
+// What the strip is playing right now, for the web UI's live view (/api/state)
+volatile uint8_t       g_curAnim = 0;        // 0 = none, 2-7 as above
+volatile unsigned long g_curAnimStart = 0;   // millis() when it started
+volatile uint32_t      g_curAnimLen = 0;     // its duration before the fade-out (ms)
+volatile bool          g_curAnimDown = false;
 volatile bool g_pendingReboot = false;
 
 // External control (parking/garage signalling). Web handler sets g_pendingExtCmd;
@@ -169,7 +189,7 @@ int gammaw[] = {
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
 // Firmware version – shown in web UI footer
-#define FW_VERSION "2.7.0"
+#define FW_VERSION "2.8.0"
 
 // Night mode parameters – defined here so parking.h can use them
 #define NIGHT_HOUR_START      1   // 1:00
@@ -195,7 +215,11 @@ struct Settings {
   bool     nightEnabled;
   uint8_t  nightStart;     // hour 0–23 (inclusive)
   uint8_t  nightEnd;       // hour 0–23 (exclusive)
+  uint8_t  automationOff;  // 1 = automation off (survives restarts); anything else = on.
+                           // Added without a version bump: older devices read their unused
+                           // EEPROM byte here (0 or 0xFF), so they keep automation on.
 };
+static_assert(sizeof(Settings) <= EEPROM_BIRTHDAYS_ADDR, "settings would overlap birthdays");
 Settings g_settings;
 
 void saveSettings() {
@@ -216,6 +240,7 @@ void loadSettings() {
     g_settings.nightEnabled = true;
     g_settings.nightStart   = NIGHT_HOUR_START;
     g_settings.nightEnd     = NIGHT_HOUR_END;
+    g_settings.automationOff = 0;
     saveSettings();
   }
 }
@@ -297,214 +322,10 @@ void applyManualColor() {
 }
 
 // Statisches Frontend (cachebar), State und Aktionen per API
+#include "web_ui.h"
+
 void handleIndex(AsyncWebServerRequest *request) {
-  AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", PSTR(
-    "<!DOCTYPE html><html><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\">"
-    "<title>Stair Light</title><style>"
-    "body{font-family:sans-serif;margin:0;background:#1a1a1a;color:#eee;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:1.5rem 1rem;box-sizing:border-box;}"
-    "main{text-align:center;max-width:420px;width:100%;} h1{font-size:1.3rem;margin:0 0 1rem;}"
-    ".section{background:#222;padding:0.8rem;border-radius:8px;margin-bottom:0.8rem;}"
-    "button.btn{padding:0.7rem 1rem;border-radius:8px;font-size:1rem;cursor:pointer;border:1px solid rgba(0,0,0,0.25);min-height:2.4em;"
-    "box-shadow:inset 0 1px 0 rgba(255,255,255,0.15),0 2px 4px rgba(0,0,0,0.3);text-shadow:0 1px 1px rgba(0,0,0,0.3);transition:box-shadow .1s,transform .1s;}"
-    "button.btn:active{box-shadow:inset 0 2px 6px rgba(0,0,0,0.4);transform:translateY(1px);}"
-    ".auto-on{background:linear-gradient(180deg,#3a5a3a,#1a3a1a);color:#9f9;}"
-    ".auto-off{background:linear-gradient(180deg,#5a3a3a,#3a1a1a);color:#f99;}"
-    ".preset{background:linear-gradient(180deg,#3a4a5c,#1a2a38);color:#8cf;padding:0.5rem 0.7rem;font-size:0.95rem;}"
-    ".reboot{background:linear-gradient(180deg,#884422,#442200);color:#ffc;}"
-    ".anim-btn{padding:0.6rem 0.8rem;font-size:0.9rem;border-radius:8px;cursor:pointer;border:1px solid rgba(0,0,0,0.25);"
-    "box-shadow:inset 0 1px 0 rgba(255,255,255,0.15),0 2px 4px rgba(0,0,0,0.3);transition:box-shadow .1s,transform .1s;}"
-    ".anim-btn:active{box-shadow:inset 0 2px 6px rgba(0,0,0,0.4);transform:translateY(1px);}"
-    ".a1{background:linear-gradient(180deg,#3a5a3a,#1a3a1a);color:#9f9;}"
-    ".a2{background:linear-gradient(180deg,#2a3a5a,#1a2a4a);color:#8cf;}"
-    ".a3{background:linear-gradient(180deg,#4a4a4a,#2a2a2a);color:#eee;}"
-    ".a4{background:linear-gradient(180deg,#1a2a4a,#0a1a3a);color:#88f;}"
-    ".a5{background:linear-gradient(180deg,#5a3a5a,#3a1a3a);color:#f8f;}"
-    ".a6{background:linear-gradient(180deg,#5a2a2a,#3a1a1a);color:#f88;}"
-    ".led{width:12px;height:12px;border-radius:50%;display:inline-block;flex-shrink:0;box-shadow:0 0 6px currentColor;}"
-    ".led-r{background:#e00;color:#e00;} .led-g{background:#0a0;color:#0a0;} .led-b{background:#06f;color:#06f;} .led-w{background:#eee;color:#eee;}"
-    ".slider-row{display:flex;align-items:center;gap:8px;margin:6px 0;}"
-    "input[type=range]{flex:1;height:6px;-webkit-appearance:none;appearance:none;background:#333;border-radius:3px;outline:none;}"
-    "input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;cursor:pointer;border:2px solid #555;}"
-    ".sr input::-webkit-slider-thumb{background:#e00;} .sg input::-webkit-slider-thumb{background:#0a0;} .sb input::-webkit-slider-thumb{background:#06f;} .sw input::-webkit-slider-thumb{background:#eee;}"
-    "span.pct{min-width:2.5em;text-align:right;font-size:0.9rem;}"
-    ".row{display:flex;align-items:center;justify-content:center;gap:6px;margin:6px 0;flex-wrap:wrap;}"
-    "table{width:100%;border-collapse:collapse;font-size:0.85rem;margin-top:0.3rem;} th,td{border:1px solid #444;padding:0.25rem 0.4rem;text-align:left;} th{background:#333;}"
-    "details{background:#222;border-radius:8px;margin-bottom:0.5rem;} summary{padding:0.6rem 0.8rem;cursor:pointer;font-weight:bold;font-size:0.95rem;color:#aaa;}"
-    "details[open] summary{color:#eee;} details .inner{padding:0 0.8rem 0.8rem;}"
-    "</style></head><body><main>"
-    "<h1>Stair Light</h1>"
-    "<p style=margin-bottom:0.5rem;font-size:0.95rem;><span id=dateDisplay>--</span> <span id=timeDisplay>--</span></p>"
-    "<p style=margin-bottom:0.3rem;font-size:0.85rem;>Uptime: <span id=uptimeDisplay>--</span> &nbsp; Last reboot: <span id=lastRebootDisplay>--</span></p>"
-    "<div class=section>"
-    "<b>Stair automation</b><br>"
-    "<div class=row><button type=button class=\"btn auto-on\" id=autoOn>On</button>"
-    "<button type=button class=\"btn auto-off\" id=autoOff>Off</button>"
-    "<b id=autoStatus style=margin-left:0.3rem;>&ndash;</b></div>"
-    "<p id=nightBadge style=\"display:none;margin:0.4rem 0 0;padding:0.4rem 0.8rem;border-radius:8px;background:rgba(180,40,40,0.25);border:1px solid #a33;font-size:0.9rem;color:#f88;\">Night mode active <span id=nightWindow></span></p>"
-    "</div>"
-    "<div class=section>"
-    "<b>RGBW Channels</b>"
-    "<div class=\"slider-row sr\"><span class=\"led led-r\"></span><input type=range id=slR min=0 max=100 value=0><span id=pctR class=pct>0%</span></div>"
-    "<div class=\"slider-row sg\"><span class=\"led led-g\"></span><input type=range id=slG min=0 max=100 value=0><span id=pctG class=pct>0%</span></div>"
-    "<div class=\"slider-row sb\"><span class=\"led led-b\"></span><input type=range id=slB min=0 max=100 value=0><span id=pctB class=pct>0%</span></div>"
-    "<div class=\"slider-row sw\"><span class=\"led led-w\"></span><input type=range id=slW min=0 max=100 value=0><span id=pctW class=pct>0%</span></div>"
-    "<div class=row style=margin-top:0.5rem;><b style=margin-right:0.3rem;>All</b>"
-    "<button type=button class=\"btn preset\" data-all=0>0%</button>"
-    "<button type=button class=\"btn preset\" data-all=25>25%</button>"
-    "<button type=button class=\"btn preset\" data-all=50>50%</button>"
-    "<button type=button class=\"btn preset\" data-all=75>75%</button>"
-    "<button type=button class=\"btn preset\" data-all=100>100%</button></div>"
-    "</div>"
-    "<div class=section>"
-    "<b>Animations (10 s)</b>"
-    "<div class=row style=margin-top:0.5rem;>"
-    "<button type=button class=\"anim-btn a1\" data-anim=1>Random fade</button>"
-    "<button type=button class=\"anim-btn a2\" data-anim=2>Rainbow</button>"
-    "<button type=button class=\"anim-btn a3\" data-anim=3>White ramp</button>"
-    "</div><div class=row>"
-    "<button type=button class=\"anim-btn a4\" data-anim=4>Star sparkle</button>"
-    "<button type=button class=\"anim-btn a5\" data-anim=5>Birthday</button>"
-    "<button type=button class=\"anim-btn a6\" data-anim=6>Night red</button>"
-    "</div></div>"
-    "<p><button type=button class=\"btn reboot\" id=rebootBtn>Reboot</button></p>"
-    "<details id=detailLog><summary>Last 5 motions</summary><div class=inner>"
-    "<table><thead><tr><th>Time</th><th>Direction</th><th>Animation</th></tr></thead><tbody id=motionLogBody></tbody></table></div></details>"
-    "<details id=detailMem><summary>Memory status</summary><div class=inner>"
-    "<table><thead><tr><th>Type</th><th>Total</th><th>Used</th><th>Usage</th></tr></thead><tbody id=memoryBody></tbody></table></div></details>"
-    "<details id=detailCpu><summary>CPU / Runtime</summary><div class=inner>"
-    "<table><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody id=cpuBody></tbody></table></div></details>"
-    "<details id=detailWifi><summary>WiFi</summary><div class=inner>"
-    "<table><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody id=wifiBody></tbody></table></div></details>"
-    "<details id=detailSettings><summary>Settings</summary><div class=inner>"
-    "<div style=margin-bottom:0.6rem;>"
-    "<label style=display:block;margin-bottom:0.2rem;font-size:0.9rem;>Hostname</label>"
-    "<input type=text id=setHostname style=\"width:100%;box-sizing:border-box;padding:0.4rem;background:#111;color:#eee;border:1px solid #444;border-radius:6px;\">"
-    "<div style=font-size:0.75rem;color:#888;margin-top:0.2rem;>Applies after reboot</div>"
-    "</div>"
-    "<div style=margin-bottom:0.6rem;><label style=font-size:0.9rem;><input type=checkbox id=setNightEnabled> Night mode enabled</label></div>"
-    "<div class=row style=justify-content:flex-start;>"
-    "<label style=font-size:0.9rem;>Start <input type=number id=setNightStart min=0 max=23 style=\"width:3.5em;background:#111;color:#eee;border:1px solid #444;border-radius:6px;padding:0.3rem;\">:00</label>"
-    "<label style=font-size:0.9rem;>End <input type=number id=setNightEnd min=0 max=23 style=\"width:3.5em;background:#111;color:#eee;border:1px solid #444;border-radius:6px;padding:0.3rem;\">:00</label>"
-    "</div>"
-    "<div class=row style=justify-content:flex-start;margin-top:0.5rem;>"
-    "<button type=button class=\"btn preset\" id=setSave>Save settings</button>"
-    "<span id=setStatus style=font-size:0.85rem;></span></div>"
-    "</div></details>"
-    "<details id=detailBirthdays><summary>Birthdays</summary><div class=inner>"
-    "<div class=slider-row style=\"gap:6px;font-size:0.75rem;color:#888;margin-bottom:0.2rem;\"><span style=\"width:64px;box-sizing:border-box;text-align:center;\">Month</span><span style=\"width:64px;box-sizing:border-box;text-align:center;\">Day</span><span style=flex:1;>Name</span></div>"
-    "<div id=bdayRows></div>"
-    "<div class=row style=justify-content:flex-start;margin-top:0.5rem;>"
-    "<button type=button class=\"btn preset\" id=bdayAdd>+ Add</button>"
-    "<button type=button class=\"btn preset\" id=bdaySave>Save</button>"
-    "<span id=bdayStatus style=font-size:0.85rem;></span></div>"
-    "</div></details>"
-    "<p style=margin-top:1rem;font-size:0.75rem;color:#666;>Firmware v" FW_VERSION "</p></main>"
-    "<script>"
-    "var sliders={r:document.getElementById('slR'),g:document.getElementById('slG'),b:document.getElementById('slB'),w:document.getElementById('slW')};"
-    "var pcts={r:document.getElementById('pctR'),g:document.getElementById('pctG'),b:document.getElementById('pctB'),w:document.getElementById('pctW')};"
-    "var debounce={};"
-    "function post(url,body){return fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body||''});}"
-    "function loadFast(){"
-    "Promise.all([fetch('/api/state').then(function(r){return r.json();}),fetch('/api/time').then(function(r){return r.json();})]).then(function(arr){"
-    "var d=arr[0],t=arr[1];"
-    "document.getElementById('autoStatus').textContent=d.auto?'On':'Off';"
-    "document.getElementById('nightBadge').style.display=d.night?'block':'none';"
-    "var ch=['r','g','b','w'];"
-    "for(var i=0;i<4;i++){if(!debounce[ch[i]]){sliders[ch[i]].value=d[ch[i]];pcts[ch[i]].textContent=d[ch[i]]+'%';}}"
-    "document.getElementById('dateDisplay').textContent=t.date||'--';"
-    "document.getElementById('timeDisplay').textContent=t.time||'--';"
-    "var ms=t.uptime_ms||0,dy=Math.floor(ms/86400000),h=Math.floor((ms%86400000)/3600000),m=Math.floor((ms%3600000)/60000);"
-    "document.getElementById('uptimeDisplay').textContent=(dy>0?dy+'d ':'')+h+'h '+m+'m';"
-    "document.getElementById('lastRebootDisplay').textContent=t.last_reboot||'--';"
-    "});}"
-    "function loadSlow(){"
-    "var dl=document.getElementById('detailLog'),dm=document.getElementById('detailMem'),dc=document.getElementById('detailCpu'),dw=document.getElementById('detailWifi');"
-    "var fetches=[],keys=[];"
-    "if(dl.open){fetches.push(fetch('/api/log').then(function(r){return r.json();}));keys.push('log');}else{fetches.push(Promise.resolve(null));keys.push('log');}"
-    "if(dm.open){fetches.push(fetch('/api/memory').then(function(r){return r.json();}));keys.push('mem');}else{fetches.push(Promise.resolve(null));keys.push('mem');}"
-    "if(dc.open||dw.open){fetches.push(fetch('/api/sysinfo').then(function(r){return r.json();}));keys.push('sys');}else{fetches.push(Promise.resolve(null));keys.push('sys');}"
-    "Promise.all(fetches).then(function(arr){"
-    "var log=arr[0],mem=arr[1],sys=arr[2];"
-    "if(log){"
-    "var tb=document.getElementById('motionLogBody');tb.innerHTML='';"
-    "for(var i=0;i<log.length;i++){var r=document.createElement('tr');r.innerHTML='<td>'+log[i].time+'</td><td>'+log[i].dir+'</td><td>'+log[i].anim+'</td>';tb.appendChild(r);}}"
-    "if(mem){"
-    "function fmt(n){return n>=1024?(n/1024).toFixed(1)+' KB':n+' B';}"
-    "document.getElementById('memoryBody').innerHTML='<tr><td>Heap (RAM)</td><td>'+fmt(mem.heap_total)+'</td><td>'+fmt(mem.heap_used)+'</td><td>'+mem.heap_pct+'%</td></tr>"
-    "<tr><td>Flash</td><td>'+fmt(mem.flash_size)+'</td><td>'+fmt(mem.flash_used)+'</td><td>'+mem.flash_pct+'%</td></tr>"
-    "<tr><td>RTC</td><td>'+fmt(mem.rtc_total)+'</td><td>'+fmt(mem.rtc_used)+'</td><td>'+mem.rtc_pct+'%</td></tr>';}"
-    "if(sys){"
-    "var rsn=sys.reset_reason||'--';var exRow=(rsn.indexOf('xception')>=0)?'<tr><td>Exception info</td><td>'+sys.reset_info+'</td></tr>':'';"
-    "document.getElementById('cpuBody').innerHTML='<tr><td>CPU freq</td><td>'+sys.cpu_mhz+' MHz</td></tr><tr><td>Reset reason</td><td>'+rsn+'</td></tr>'+exRow;"
-    "function rssiQ(v){if(v>=-50)return 'Excellent';if(v>=-60)return 'Good';if(v>=-70)return 'Fair';return 'Poor';}"
-    "var rssi=sys.rssi||0;"
-    "document.getElementById('wifiBody').innerHTML='<tr><td>SSID</td><td>'+sys.ssid+'</td></tr><tr><td>BSSID</td><td>'+sys.bssid+'</td></tr><tr><td>IP</td><td>'+sys.ip+'</td></tr>"
-    "<tr><td>Gateway</td><td>'+sys.gateway+'</td></tr><tr><td>DNS</td><td>'+sys.dns+'</td></tr><tr><td>Channel</td><td>'+sys.channel+'</td></tr>"
-    "<tr><td>RSSI</td><td>'+rssi+' dBm ('+rssiQ(rssi)+')</td></tr><tr><td>Reconnects</td><td>'+sys.reconnects+'</td></tr>';}"
-    "});}"
-    "['r','g','b','w'].forEach(function(ch){"
-    "sliders[ch].addEventListener('input',function(){"
-    "pcts[ch].textContent=this.value+'%';"
-    "debounce[ch]=true;clearTimeout(debounce[ch+'t']);"
-    "debounce[ch+'t']=setTimeout(function(){post('/api/color','c='+ch+'&v='+sliders[ch].value).then(function(){debounce[ch]=false;});},100);"
-    "});"
-    "});"
-    "document.getElementById('autoOn').onclick=function(){post('/api/auto','on=1').then(loadFast);};"
-    "document.getElementById('autoOff').onclick=function(){post('/api/auto','on=0').then(loadFast);};"
-    "document.querySelectorAll('.preset[data-all]').forEach(function(btn){btn.onclick=function(){post('/api/color','all='+btn.getAttribute('data-all')).then(loadFast);};});"
-    "document.querySelectorAll('.anim-btn').forEach(function(btn){btn.onclick=function(){post('/api/play','anim='+btn.getAttribute('data-anim'));};});"
-    "document.getElementById('rebootBtn').onclick=function(){this.disabled=true;this.textContent='Rebooting...';post('/api/reboot').then(function(){setTimeout(function(){location.reload();},4000);});};"
-    "function loadSettings(){"
-    "fetch('/api/settings').then(function(r){return r.json();}).then(function(s){"
-    "document.getElementById('setHostname').value=s.hostname||'';"
-    "document.getElementById('setNightEnabled').checked=!!s.night_enabled;"
-    "document.getElementById('setNightStart').value=s.night_start;"
-    "document.getElementById('setNightEnd').value=s.night_end;"
-    "document.getElementById('nightWindow').textContent='('+s.night_start+':00 - '+s.night_end+':00)';"
-    "});}"
-    "document.getElementById('setSave').onclick=function(){"
-    "var body='hostname='+encodeURIComponent(document.getElementById('setHostname').value)"
-    "+'&night_enabled='+(document.getElementById('setNightEnabled').checked?1:0)"
-    "+'&night_start='+document.getElementById('setNightStart').value"
-    "+'&night_end='+document.getElementById('setNightEnd').value;"
-    "var st=document.getElementById('setStatus');st.textContent='Saving...';st.style.color='#fc8';"
-    "post('/api/settings',body).then(function(r){"
-    "if(r.status===204){st.textContent='Saved';st.style.color='#9f9';loadSettings();}"
-    "else{st.textContent='Invalid';st.style.color='#f88';}"
-    "});};"
-    "var BDAY_MAX=20;"
-    "function bdayRow(m,d,name){"
-    "var div=document.createElement('div');div.className='slider-row';div.style.gap='6px';"
-    "div.innerHTML='<input type=number min=1 max=12 class=bm placeholder=MM style=\"width:3.2em;background:#111;color:#eee;border:1px solid #444;border-radius:6px;padding:0.3rem;\"> '"
-    "+'<input type=number min=1 max=31 class=bd placeholder=DD style=\"width:3.2em;background:#111;color:#eee;border:1px solid #444;border-radius:6px;padding:0.3rem;\"> '"
-    "+'<input type=text class=bn placeholder=name style=\"flex:1;min-width:0;background:#111;color:#eee;border:1px solid #444;border-radius:6px;padding:0.3rem;\"> '"
-    "+'<button type=button class=btn style=\"padding:0.2rem 0.6rem;background:#522;color:#f99;\">x</button>';"
-    "div.querySelector('.bm').value=m;div.querySelector('.bd').value=d;div.querySelector('.bn').value=name||'';"
-    "div.querySelector('button').onclick=function(){div.remove();};"
-    "return div;}"
-    "function loadBirthdays(){"
-    "fetch('/api/birthdays').then(function(r){return r.json();}).then(function(a){"
-    "var box=document.getElementById('bdayRows');box.innerHTML='';"
-    "for(var i=0;i<a.length;i++){box.appendChild(bdayRow(a[i].m,a[i].d,a[i].name));}"
-    "});}"
-    "document.getElementById('bdayAdd').onclick=function(){"
-    "var box=document.getElementById('bdayRows');if(box.children.length>=BDAY_MAX)return;box.appendChild(bdayRow('','',''));};"
-    "document.getElementById('bdaySave').onclick=function(){"
-    "var rows=document.getElementById('bdayRows').children;var body='count='+rows.length;"
-    "for(var i=0;i<rows.length;i++){"
-    "body+='&m'+i+'='+encodeURIComponent(rows[i].querySelector('.bm').value)"
-    "+'&d'+i+'='+encodeURIComponent(rows[i].querySelector('.bd').value)"
-    "+'&n'+i+'='+encodeURIComponent(rows[i].querySelector('.bn').value);}"
-    "var st=document.getElementById('bdayStatus');st.textContent='Saving...';st.style.color='#fc8';"
-    "post('/api/birthdays',body).then(function(r){"
-    "if(r.status===204){st.textContent='Saved';st.style.color='#9f9';loadBirthdays();}"
-    "else{st.textContent='Invalid';st.style.color='#f88';}"
-    "});};"
-    "loadFast();loadSlow();loadSettings();loadBirthdays();"
-    "setInterval(loadFast,2000);"
-    "setInterval(loadSlow,15000);"
-    "</script></body></html>"
-  ));
+  AsyncWebServerResponse *response = request->beginResponse_P(200, F("text/html"), INDEX_HTML);
   response->addHeader(F("Cache-Control"), F("public, max-age=3600"));
   request->send(response);
 }
@@ -517,6 +338,13 @@ void handleApiState(AsyncWebServerRequest *request) {
   json += ",\"b\":"; json += manual_b;
   json += ",\"w\":"; json += manual_w;
   json += ",\"night\":"; json += isNightMode(g_lastNtpTime) ? "1" : "0";
+  uint8_t anim = g_curAnim;
+  json += ",\"anim\":"; json += anim;
+  if (anim) {
+    json += ",\"anim_ms\":"; json += (unsigned long)(millis() - g_curAnimStart);
+    json += ",\"anim_len\":"; json += (unsigned long)g_curAnimLen;
+    json += ",\"dir\":\""; json += g_curAnimDown ? "DOWN" : "UP"; json += "\"";
+  }
   json += "}";
   AsyncWebServerResponse *response = request->beginResponse(200, F("application/json"), json);
   response->addHeader(F("Cache-Control"), F("no-store"));
@@ -526,6 +354,8 @@ void handleApiState(AsyncWebServerRequest *request) {
 void handleApiAuto(AsyncWebServerRequest *request) {
   if (request->hasParam(F("on"), true)) {
     automationOn = (request->getParam(F("on"), true)->value().toInt() != 0);
+    uint8_t off = automationOn ? 0 : 1;
+    if (g_settings.automationOff != off) { g_settings.automationOff = off; saveSettings(); }
     if (!automationOn) applyManualColor();
     else { setAll(0, 0, 0, 0); strip.show(); }
   }
@@ -596,11 +426,11 @@ void handleApiAlloff(AsyncWebServerRequest *request) {
   request->send(204);
 }
 
-// Play animation for 10 s (1–5 as below, 6=night red breathing)
+// Play animation for 10 s (2-7, see runAnimation)
 void handleApiPlay(AsyncWebServerRequest *request) {
-  if (!request->hasParam(F("anim"), true)) { request->send(400, F("text/plain"), F("anim=1..6")); return; }
+  if (!request->hasParam(F("anim"), true)) { request->send(400, F("text/plain"), F("anim=2..7")); return; }
   int anim = request->getParam(F("anim"), true)->value().toInt();
-  if (anim < 1 || anim > 6) { request->send(400, F("text/plain"), F("anim 1..6")); return; }
+  if (anim < 2 || anim > 7) { request->send(400, F("text/plain"), F("anim 2..7")); return; }
   g_pendingPlayAnim = anim;
   request->send(204);
 }
@@ -677,12 +507,12 @@ void handleApiReboot(AsyncWebServerRequest *request) {
 // GET /api/log – JSON array of last 5 motions: { dir, anim, time } (newest first)
 void handleApiLog(AsyncWebServerRequest *request) {
   String json = "[";
-  const char* animNames[] = { "", "Random fade", "Rainbow", "White ramp", "Star sparkle", "Birthday" };
+  const char* animNames[] = { "", "", "Rainbow", "White ramp", "Star sparkle", "Birthday", "Night red", "Matrix" };
   for (uint8_t i = 0; i < motionLogCount; i++) {
     int idx = (motionLogHead - 1 - i + MOTION_LOG_SIZE) % MOTION_LOG_SIZE;
     if (i > 0) json += ",";
     json += "{\"dir\":\""; json += motionLog[idx].dir;
-    json += "\",\"anim\":\""; json += (motionLog[idx].anim_id <= 5) ? animNames[motionLog[idx].anim_id] : "";
+    json += "\",\"anim\":\""; json += (motionLog[idx].anim_id <= 7) ? animNames[motionLog[idx].anim_id] : "";
     json += "\",\"time\":\"";
     if (motionLog[idx].timestamp <= 0) {
       json += "--:--";
@@ -1058,6 +888,7 @@ void setup() {
 
   // Load persisted settings (hostname, night mode) – falls back to defaults
   loadSettings();
+  automationOn = (g_settings.automationOff != 1);
   loadBirthdays();
 
   // Count WiFi re-connects (skip the very first connection at boot)
@@ -1196,13 +1027,30 @@ void setup() {
   }
 }
   
+// Plays animation 2-7 in direction dir (1 was the removed random colour fade) ("UP"/"DOWN"); blocks until it has faded out.
+void runAnimation(uint8_t id, const String& dir) {
+  g_curAnimDown = (dir == "DOWN");
+  g_curAnimLen = (g_animDurationOverrideMs != 0) ? g_animDurationOverrideMs : (uint32_t)ANIM_DURATION;
+  g_curAnimStart = millis();
+  g_curAnim = id;
+  switch (id) {
+    case 2: rainbowSteps(dir); break;
+    case 3: FadeToFullBrightness(dir); break;
+    case 4: starSparkle(dir); break;
+    case 5: birthday(dir); break;
+    case 6: nightAnimation(dir); break;
+    case 7: matrixRain(dir); break;
+  }
+  g_curAnim = 0;
+}
+
 void loop() {
   Serial.println("");
   int count = 0;
   String dir = "";
   int currenttime = 0;
   int lastPir1 = -1, lastPir2 = -1;  // for debug: detect change
-  static int lastAnimation = 0;      // 0 = none yet, 1–4 = last chosen animation (no repeat)
+  static int lastAnimation = 0;      // 0 = none yet, else the last chosen animation (no repeat)
   static bool wasNightMode = false;
   bool extWasActive = false;         // tracks external-override active state across iterations
   bool ignoreMotionUntilLow = false; // after an override ends, ignore lingering PIR HIGH
@@ -1221,15 +1069,7 @@ void loop() {
       int anim = g_pendingPlayAnim;
       g_pendingPlayAnim = 0;
       g_animDurationOverrideMs = 10000;
-      if (anim == 6) {
-        nightAnimation("UP");
-        setAll(0, 0, 0, 0);
-        strip.show();
-      } else if (anim == 1) simpleFadeToRandom(F("UP"));
-      else if (anim == 2) rainbowSteps(F("UP"));
-      else if (anim == 3) FadeToFullBrightness(F("UP"));
-      else if (anim == 4) starSparkle(F("UP"));
-      else if (anim == 5) birthday(F("UP"));
+      runAnimation(anim, F("UP"));
       g_animDurationOverrideMs = 0;
       if (!automationOn) applyManualColor();
       else { setAll(0, 0, 0, 0); strip.show(); }
@@ -1304,7 +1144,7 @@ void loop() {
       Serial.println(">>> PIR triggered (night): " + dir + " -> night animation");
 #endif
       addMotionLog(dir.c_str(), 6);
-      nightAnimation(dir);
+      runAnimation(6, dir);
       for (unsigned long t = millis(); millis() - t < (unsigned long)POST_ANIM_DELAY_MS && g_pendingExtCmd == 0; ) {
         ArduinoOTA.handle();
         delay(100);
@@ -1315,35 +1155,24 @@ void loop() {
 #endif
       if (isBirthdayToday(currenttime)) {
         addMotionLog(dir.c_str(), 5);  // 5 = Birthday
-        birthday(dir);
+        runAnimation(5, dir);
         // 10 s delay after birthday animation (same as others)
         for (unsigned long t = millis(); millis() - t < (unsigned long)POST_ANIM_DELAY_MS && g_pendingExtCmd == 0; ) {
           ArduinoOTA.handle();
           delay(100);
         }
       } else {
-        // Random 1–4, but not same animation as last time
+        // Random pick, but not the same animation as last time (birthday and night red
+        // have their own days/hours)
+        static const uint8_t CHOICES[] = { 2, 3, 4, 7 };
         int choice;
         do {
-          choice = random(1, 5);
+          choice = CHOICES[random(sizeof(CHOICES))];
         } while (choice == lastAnimation);
         lastAnimation = choice;
         addMotionLog(dir.c_str(), (uint8_t)choice);
 
-        switch (choice) {
-          case 1:
-            simpleFadeToRandom(dir);
-            break;
-          case 2:
-            rainbowSteps(dir);
-            break;
-          case 3:
-            FadeToFullBrightness(dir);
-            break;
-          case 4:
-            starSparkle(dir);
-            break;
-        }
+        runAnimation((uint8_t)choice, dir);
         // 10 s delay after animation (OTA and web stay available)
         for (unsigned long t = millis(); millis() - t < (unsigned long)POST_ANIM_DELAY_MS && g_pendingExtCmd == 0; ) {
           ArduinoOTA.handle();

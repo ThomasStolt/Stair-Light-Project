@@ -301,14 +301,14 @@ Pins (see comments in sketch): NeoPixel = GPIO 14 (D5), PIR1 = GPIO 16 (D0), PIR
 
 Direction (up/down) is detected via PIR1/PIR2. With stair automation on, a random one of these animations runs (no back-to-back repeat):
 
-- **Random fade** (`simpleFadeToRandom`) – steps fade in/out in a random colour  
-- **Rainbow** (`rainbowSteps`) – rainbow per step, then run  
+- **Rainbow** (`rainbowSteps`) – steps fade in as a wave, colours flow in walking direction  
 - **White ramp** (`FadeToFullBrightness`) – all steps to white  
-- **Star sparkle** (`starSparkle`) – dark blue background with white “stars”
+- **Star sparkle** (`starSparkle`) – dark blue backdrop with white stars that light up and fade out  
+- **Matrix** (`matrixRain`) – green digital rain falling down the stairs
 
-On **birthdays** (from `birthdays.h`) only the **birthday animation** runs (random colours, 50% brightness).
+On **birthdays** (from the web UI / `birthdays.h`) the **birthday animation** runs instead: random colours on about three quarters of the LEDs, each glowing and fading. At night (night mode hours) motion turns on a soft red light (**Night red**, `nightAnimation`).
 
-In the web UI under **Animation (10 s)** you can test all of the above plus **Night (red breathing)** for 10 seconds with “Go”.
+In the web UI you can play each of these for 10 seconds.
 
 More functions and possible new animations are in **`parking.h`**.
 
