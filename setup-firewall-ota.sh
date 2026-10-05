@@ -29,7 +29,7 @@ sudo "$SOCKETFILTERFW" --add "$PYTHON_BIN"
 sudo "$SOCKETFILTERFW" --unblockapp "$PYTHON_BIN"
 
 # Oft wird die eingehende Verbindung dem Terminal zugerechnet – deshalb auch erlauben
-for app in "/System/Applications/Utilities/Terminal.app" "/Applications/Cursor.app"; do
+for app in "/System/Applications/Utilities/Terminal.app" "/Applications/Cursor.app" "/Applications/Termius.app"; do
   if [[ -d "$app" ]]; then
     echo "  → $app"
     sudo "$SOCKETFILTERFW" --add "$app" 2>/dev/null || true
