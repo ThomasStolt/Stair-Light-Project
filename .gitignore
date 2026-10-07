@@ -16,3 +16,12 @@ build/
 CLAUDE.md
 CLAUDE.local.md
 .claude/
+
+# macOS / KiCad local files (history with its own .git, caches, automatic backups)
+.DS_Store
+**/.history/
+**/fp-info-cache
+**/*-backups/
+
+# Brainstorming-Tool (lokale Arbeitsdateien)
+.superpowers/
