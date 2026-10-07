@@ -1,11 +1,11 @@
 # Stair Light Project
 
-Automatic animated stair lighting with **SK6812 RGBW** LEDs. Two PIR sensors (SR-HC501) at the first and last step detect direction and trigger a random animation. Control via **web UI** (stair automation on/off, manual colours, night mode indicator, 10 s animation test) and optional **night mode** (1–6 h: red only, breathing).
+Automatic animated stair lighting with **SK6812 RGBW** LEDs. Two PIR sensors (SR-HC501) at the first and last step detect direction and trigger a random animation. Control via a phone-friendly **web UI** (motion automation on/off, playing animations, fixed colour, device status, settings and birthdays) and optional **night mode** (configurable hours: soft red light only).
 
 - **MCU:** ESP8266 (e.g. NodeMCU)
 - **LEDs:** SK6812 RGBW (WS2812-compatible), 27 LEDs per step, 16 steps (configurable)
 - **Sensors:** PIR1 = “up”, PIR2 = “down”
-- **Boot:** Stair automation is **on** after boot; 3× green blink indicates “ready”.
+- **Boot:** Three soft green-white pulses (2 s) signal “ready”. Motion automation comes back as it was last set (on for a new device).
 
 <div align="center">
   <img src="images/stairlight-neopixel.gif" alt="Stair Light test bed" width="100%">
@@ -31,6 +31,7 @@ Automatic animated stair lighting with **SK6812 RGBW** LEDs. Two PIR sensors (SR
 |-------------|-------------|
 | `rgbw_stair_light/` | Main sketch (stair light + OTA) |
 | `rgbw_stair_light/parking.h` | Animations and helpers |
+| `rgbw_stair_light/web_ui.h` | Web UI page (HTML/CSS/JS, served from flash) |
 | `rgbw_stair_light/birthdays.h.example` | Template for birthdays (copy to `birthdays.h`) |
 | `schematics/` | KiCad schematic, PCB |
 | `images/` | Photos (incl. test bed) |
@@ -40,7 +41,7 @@ Automatic animated stair lighting with **SK6812 RGBW** LEDs. Two PIR sensors (SR
 | Script | Purpose |
 |--------|---------|
 | `upload-to-esp8266.sh` | Compile + upload **via USB** |
-| `upload-to-esp8266-ota.sh` | Compile + upload **via OTA** (WiFi) |
+| `upload-to-esp8266-ota.sh` | Upload **via OTA** (WiFi) to one or more devices; compiles only when the sketch changed |
 | `upload-ota-firewall-ok.sh` | OTA with **firewall temporarily disabled** (macOS) |
 | `setup-firewall-ota.sh` | Add firewall rule for OTA (macOS, sudo) |
 
@@ -118,22 +119,28 @@ Prerequisite: the ESP is already running firmware with **ArduinoOTA** (e.g. afte
   ./upload-to-esp8266-ota.sh 192.168.2.185
   ```
 
+- **Several devices in one go** (same build for all, password asked once):  
+  ```bash
+  ./upload-ota-firewall-ok.sh 192.168.1.50 192.168.1.51
+  ```
+
 The IP is shown in the serial monitor after “Connected, IP address:” or “Web server: http://…”.
 
-**Web UI:** Open `http://<IP>` or `http://<OTA_HOSTNAME>.local` in a browser.
+**Web UI:** Open `http://<IP>` or `http://<hostname>.local` in a browser. The page is made for phones. Its fonts load from Google Fonts when the phone has internet; without internet it uses the system font.
 
-- **Date & time** – NTP-synced local time (updates every second).
-- **Stair automation** on/off (**on** by default after boot).
-- **Manual colours** – Per channel (red, green, blue, white): −10%, on/off, +10% brightness; value shown in %.
-- **All** – Preset buttons 0%, 25%, 50%, 75%, 100% to set all channels to the same brightness.
-- **Reboot** – Restart the ESP from the browser.
-- **Last 5 motions** – Table of recent PIR triggers: time, direction (up/down), animation started.
-- **Memory status** – Table: Heap (RAM), Flash, RTC with total, used, and usage %.
-- **Night mode indicator** – Red badge shown when night mode is active (with hours displayed).
-- **Animation (10 s)** – Dropdown with Random fade, Rainbow, White ramp, Star sparkle, Birthday, **Night (red breathing)**; **Go** runs the selected animation for 10 seconds (any time of day).
-- **Firmware version** – Shown at the bottom of the page.
+- **Header** – Device name, WiFi network and the device's local time (NTP).
+- **Notices** – Night mode with its hours (“Night mode active” during night hours), and “Not connected, retrying” when the device can't be reached.
+- **Motion automation** – On/off switch. The setting is saved on the device and survives restarts and power cuts.
+- **Play an animation** – Tiles with live previews: Rainbow, Star sparkle, Birthday, Night red, White ramp and Matrix. A tap plays the animation for 10 s (Matrix: 60 s, `MATRIX_WEB_MS`). The tile of the animation that is running, whether started from the page or by motion, shows a progress ring.
+- **Fixed colour** – Sliders for the red, green, blue and white LEDs (0–100 %) with a colour preview, and **All** presets (Off, 25 %, 50 %, 75 %, 100 %). Shown on the stairs while motion automation is off.
+- **Recent motion** – The last 5 motion triggers with direction, animation and time.
+- **Device** – Memory, flash and WiFi signal at a glance (percent and absolute values), last restart and uptime, plus a table with IP, gateway, DNS, network and channel, access point, reconnects, CPU, restart reason, free memory, largest free block, fragmentation and space left for updates.
+- **Settings** – Device name (applied after a restart), night mode on/off and its hours.
+- **Birthdays** – Add, edit and remove up to 20 birthdays.
+- **Restart device** – With a confirmation on the page.
+- **Firmware version** – At the bottom of the page.
 
-The frontend is cached by the browser; actions use the API (GET state/time/log/memory, POST for actions). Web server and OTA stay available during animations.
+The browser caches the page for an hour, so reload it after a firmware update. The page talks to the device through a small JSON API: `GET /api/state` (automation, colour, night mode, running animation), `/api/time`, `/api/log`, `/api/memory`, `/api/sysinfo`, `/api/settings`, `/api/birthdays`, and `POST /api/auto`, `/api/color`, `/api/play` (`anim=2..7`), `/api/settings`, `/api/birthdays`, `/api/reboot`. The web server keeps answering while an animation runs; OTA uploads only work between animations.
 
 **If the firewall (macOS) blocks OTA:**  
 Use the wrapper script instead of `upload-to-esp8266-ota.sh`:
@@ -176,9 +183,9 @@ Between **1:00 and 6:00 local time** (NTP + auto CET/CEST):
 - Only the **night animation** runs: soft breathing red, max 20% brightness, **never fully off** (minimum brightness is configurable).
 - PIR triggers the night animation; manual web colours have no effect.
 - After 6:00 the strip turns off and normal behaviour (automation/manual) applies again.
-- The web UI shows a **red "Night mode active" badge** when night mode is on.
+- The web UI shows a **“Night mode active”** notice during night hours.
 
-The same “Night (red breathing)” animation can be tested anytime in the web UI under **Animation (10 s)** → **Go** for 10 seconds.
+The night animation can be tested anytime in the web UI: tap **Night red** under **Play an animation** (10 s).
 
 ---
 
@@ -308,7 +315,7 @@ Direction (up/down) is detected via PIR1/PIR2. With stair automation on, a rando
 
 On **birthdays** (from the web UI / `birthdays.h`) the **birthday animation** runs instead: random colours on about three quarters of the LEDs, each glowing and fading. At night (night mode hours) motion turns on a soft red light (**Night red**, `nightAnimation`).
 
-In the web UI you can play each of these for 10 seconds.
+In the web UI you can play each of these, plus Birthday and Night red, for 10 seconds (Matrix: 60 seconds).
 
 More functions and possible new animations are in **`parking.h`**.
 
