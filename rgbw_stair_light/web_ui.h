@@ -98,13 +98,11 @@ button{cursor:pointer}
   radial-gradient(3px 3px at 22% 84%, #ffe14f 70%, transparent),
   linear-gradient(160deg,#2a1540,#130b28);animation:twinkle 3s ease-in-out infinite reverse}
 .sw-night{background:radial-gradient(90% 120% at 50% 110%, #ff2a2a 0%, #6d0d12 48%, #1c0507 100%);animation:breathe 4s ease-in-out infinite}
-.sw-matrix{background-color:#021306;
-  background-image:linear-gradient(180deg,transparent 0 55%,rgba(61,255,106,.85) 92%,#e9ffee 97%,transparent 97.5%),
-    linear-gradient(180deg,transparent 0 60%,rgba(43,217,85,.7) 93%,#d6ffe0 98%,transparent 98.5%),
-    linear-gradient(180deg,transparent 0 70%,rgba(61,255,106,.6) 95%,#fff 99%,transparent 99.5%);
-  background-size:23px 64px,17px 90px,29px 52px;background-position:3px 0,11px 20px,7px 40px;animation:rain 1.6s linear infinite}
-.sw-matrix::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,#021306 0 4px,transparent 4px 7px)}
-@keyframes rain{to{background-position:3px 64px,11px 90px,7px 52px}}
+.sw-matrix{background:#010a03}
+.sw-matrix .mx{position:absolute;top:0;width:1ch;font:700 10px/10px ui-monospace,Menlo,Consolas,monospace;word-break:break-all;text-align:center;
+  background:linear-gradient(180deg,transparent 0%,rgba(30,255,100,.25) 30%,#1eff64 88%,#f2fff5 100%);-webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 0 2px rgba(30,255,100,.8));animation:mxfall linear infinite;transform:translateY(-100%)}
+@keyframes mxfall{to{transform:translateY(72px)}}
 @keyframes flow{to{background-position:-200% 0}}
 @keyframes twinkle{50%{filter:brightness(1.45)}}
 @keyframes breathe{50%{filter:brightness(.62)}}
@@ -175,7 +173,8 @@ details.sect .body{margin-top:14px;display:flex;flex-direction:column;gap:12px}
 footer{color:var(--dim);font-size:12.5px;text-align:center;padding-top:6px}
 
 @media (prefers-reduced-motion: reduce){
-  .sw-rainbow,.sw-stars,.sw-bday,.sw-night,.sw-matrix{animation:none}
+  .sw-rainbow,.sw-stars,.sw-bday,.sw-night,.sw-matrix .mx{animation:none}
+  .sw-matrix .mx{transform:none}
   :root{transition:none}
 }
 @media (max-width:360px){ .scenes{grid-template-columns:repeat(2,1fr)} }
@@ -206,14 +205,14 @@ footer{color:var(--dim);font-size:12.5px;text-align:center;padding-top:6px}
   </section>
 
   <section class="panel">
-    <div class="head"><h2>Play an animation</h2><span class="hint">Runs 10 s, then the stairs go back</span></div>
+    <div class="head"><h2>Play an animation</h2><span class="hint">Runs 10 s (Matrix 60 s), then the stairs go back</span></div>
     <div class="scenes" id="scenes">
       <button class="scene" data-anim="2"><div class="sw sw-rainbow"></div><div class="nm">Rainbow</div></button>
       <button class="scene" data-anim="4"><div class="sw sw-stars"></div><div class="nm">Star sparkle</div></button>
       <button class="scene" data-anim="5"><div class="sw sw-bday"></div><div class="nm">Birthday</div></button>
       <button class="scene" data-anim="6"><div class="sw sw-night"></div><div class="nm">Night red</div></button>
       <button class="scene" data-anim="3"><div class="sw sw-white"></div><div class="nm">White ramp</div></button>
-      <button class="scene" data-anim="7"><div class="sw sw-matrix"></div><div class="nm">Matrix</div></button>
+      <button class="scene" data-anim="7"><div class="sw sw-matrix" aria-hidden="true"></div><div class="nm">Matrix</div></button>
     </div>
   </section>
 
@@ -394,6 +393,15 @@ $('restartNo').addEventListener('click',function(){$('restartRow').hidden=false;
 $('restartYes').addEventListener('click',function(){$('restartConfirm').hidden=true;$('restartRow').hidden=false;var b=$('restartBtn');b.textContent='Restarting...';b.disabled=true;
   post('/api/reboot').then(function(){setTimeout(function(){location.reload();},8000);});});
 
+/* ---------- Matrix tile: falling glyph columns ---------- */
+(function(){var sw=document.querySelector('.sw-matrix'),G='ﾊﾐﾋｰｳｼﾅﾓﾆｻﾜﾂｵﾘｱﾎﾃﾏｹﾒｴｶｷﾑﾕﾗｾﾈｽﾀﾇﾍ012345789Z',cols=[];
+  function g(){return G.charAt(Math.random()*G.length|0);}
+  for(var i=0;i<13;i++){var c=el('i','mx'),t='';for(var k=0;k<12;k++)t+=g();c.textContent=t;
+    c.style.left=(i*7.7+Math.random()*2)+'%';c.style.animationDuration=(1.4+Math.random()*2.4)+'s';c.style.animationDelay=(-Math.random()*4)+'s';
+    sw.appendChild(c);cols.push(c);}
+  if(!matchMedia('(prefers-reduced-motion: reduce)').matches)setInterval(function(){   /* characters change while falling */
+    var c=cols[Math.random()*cols.length|0],t=c.textContent,k=Math.random()*t.length|0;c.textContent=t.slice(0,k)+g()+t.slice(k+1);},60);
+})();
 mixPreview();
 loadSettings();loadBirthdays();loadFast();loadSlow();setInterval(loadFast,2000);setInterval(loadSlow,15000);
 })();

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.8.1 – 2026-10-08
+
+- **Matrix runs 60 s from the web UI** (`MATRIX_WEB_MS`); the other animations still run 10 s there, and motion-triggered Matrix still runs 20 s.
+- **Matrix tile looks like the film** – The web UI preview now shows falling columns of green katakana and digits with bright leading characters that keep changing, instead of plain green stripes.
+- **Shorter, softer startup signal** – After a restart the stairs show three soft pulses (green with a little white) that fade in and out, 2 s in total and very dim, instead of three hard 1 s green blinks at 50 % (6 s).
+
 ## 2.8.0 – 2026-10-05
 
 - **Rainbow reworked** – The rainbow now fades in as a smooth wave in walking direction: each step brightens over ~1 s and the next one starts when the previous is at 20 % (200 ms later; `RAINBOW_FADE_MS`, `RAINBOW_STAGGER_MS`), so the whole staircase is lit after ~4 s. The colours already flow while the steps fade in and out, and fade-in, animation and fade-out are drawn by the same code, so there is no visible colour or brightness jump between them. It runs for the full `ANIM_DURATION` (20 s, including the fade-in) like the other animations – previously it stopped after two colour cycles (~5 s down / ~10 s up). Up and down flow at the same speed (`RAINBOW_CYCLE_MS`, one colour cycle per 5 s), colours travelling in walking direction; fade-out is a quicker wave (~1.5 s). External control still interrupts it (it fades out from wherever it is).

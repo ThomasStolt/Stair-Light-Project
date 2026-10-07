@@ -72,6 +72,7 @@
 #define MATRIX_DROP_SPEED 8       // Matrix: average fall speed (steps per second; each drop 0.5-1.25x)
 #define MATRIX_TRAIL 9            // Matrix: longest trail behind a drop (steps; shortest is half)
 #define MATRIX_BASE 6             // Matrix: faint green glow on every step (0-255 PWM; 0 = pure black)
+#define MATRIX_WEB_MS 60000       // Matrix started from the web UI runs this long (others: 10 s)
 // Auto-detect CET/CEST: UTC+1 in winter, UTC+2 in summer (last Sun of March – last Sun of October)
 static long timezoneOffsetSec(long utc) {
   time_t t = (time_t)utc;
@@ -189,7 +190,7 @@ int gammaw[] = {
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
 // Firmware version – shown in web UI footer
-#define FW_VERSION "2.8.0"
+#define FW_VERSION "2.8.1"
 
 // Night mode parameters – defined here so parking.h can use them
 #define NIGHT_HOUR_START      1   // 1:00
@@ -1016,18 +1017,22 @@ void setup() {
   Serial.println("================================");
 #endif
 
-  // Boot signal: 3× green blink (1 s on, 1 s pause), 50% brightness
-  for (int b = 0; b < 3; b++) {
-    setAll(0, 127, 0, 0);   // Green, 50% (127/255)
+  // Boot signal: 3 soft pulses (green with some white) fading in and out, 2 s in total
+  const unsigned long PULSE_MS = 667;
+  for (unsigned long t0 = millis(), t; (t = millis() - t0) < 3 * PULSE_MS; ) {
+    float x = (float)(t % PULSE_MS) / PULSE_MS;          // 0..1 within one pulse
+    float e = (x < 0.5f) ? x * 2.0f : (1.0f - x) * 2.0f;  // up, then down
+    float L = powf(e, 2.8f);                              // gamma 2.8, as gammaw[]
+    setAll(0, (int)(15.0f * L + 0.5f), 0, (int)(6.0f * L + 0.5f));   // peak green 15, white 6
     strip.show();
-    delay(1000);
-    setAll(0, 0, 0, 0);
-    strip.show();
-    delay(1000);
+    delay(5);
   }
+  setAll(0, 0, 0, 0);
+  strip.show();
 }
   
-// Plays animation 2-7 in direction dir (1 was the removed random colour fade) ("UP"/"DOWN"); blocks until it has faded out.
+// Plays animation 2-7 (1 was the removed random colour fade) in direction dir ("UP"/"DOWN");
+// blocks until it has faded out.
 void runAnimation(uint8_t id, const String& dir) {
   g_curAnimDown = (dir == "DOWN");
   g_curAnimLen = (g_animDurationOverrideMs != 0) ? g_animDurationOverrideMs : (uint32_t)ANIM_DURATION;
@@ -1068,7 +1073,7 @@ void loop() {
     if (g_pendingPlayAnim > 0) {
       int anim = g_pendingPlayAnim;
       g_pendingPlayAnim = 0;
-      g_animDurationOverrideMs = 10000;
+      g_animDurationOverrideMs = (anim == 7) ? MATRIX_WEB_MS : 10000;
       runAnimation(anim, F("UP"));
       g_animDurationOverrideMs = 0;
       if (!automationOn) applyManualColor();
